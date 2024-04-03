@@ -1,0 +1,5 @@
+#ifndef WCMP_STATIC_ROUTING_H
+#define WCMP_STATIC_ROUTING_H
+
+
+#endif /* WCMP_STATIC_ROUTING_H */

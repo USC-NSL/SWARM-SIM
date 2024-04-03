@@ -1,4 +1,4 @@
-.PHONY: copy check
+.PHONY: copy check clean purge configure
 
 
 DIRS = src scratch
@@ -18,6 +18,15 @@ copy: check
 		cp -R $$dir/* ns3/$$dir/ ;\
 	done
 
+configure: check
+	ns3/ns3 configure
+
 build: copy
 	@echo "Building swarm simulation"
 	ns3/ns3 build
+
+clean:
+	@rm -f *.o
+
+purge: check clean
+	ns3/ns3 clean
