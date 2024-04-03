@@ -1,5 +1,98 @@
 #ifndef WCMP_STATIC_ROUTING_H
 #define WCMP_STATIC_ROUTING_H
 
+#include "ns3/ipv4-routing-table-entry.h"
+#include "ns3/ipv4-routing-protocol.h"
+#include "wcmp-hasher.h"
+#include "wcmp-weights.h"
+
+/**
+ * We implement WCMP as an extension to static routing.
+ * Essentially, the system collects equal weight static routes, and then it
+ * will load balance on them given the associated weights.
+ * 
+ * This stack needs to be manually loaded onto each participating node,
+ * if not, default static/global routing will take priority over it.
+*/
+
+namespace ns3
+{
+namespace wcmp
+{
+
+class WcmpStaticRouting : public Ipv4RoutingProtocol {
+    /**
+     * \brief Get the type ID.
+     * \return The object TypeId.
+     */
+    static TypeId GetTypeId();
+
+    WcmpStaticRouting();
+    ~WcmpStaticRouting() override;
+
+    private:
+        /// The IPv4 stack instance
+        Ptr<Ipv4> m_ipv4;
+
+        /// Hash algorithm to use
+        hash_alg_t m_hash_alg;
+
+        /// The WCMP hash calculator
+        WcmpHasher hasher;
+
+        /// WCMP weights
+        WcmpWeights weights;
+
+        /// Container for the network routes
+        typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>> NetworkRoutes;
+
+        /// Const Iterator for container for the network routes
+        typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::const_iterator NetworkRoutesCI;
+
+        /// Iterator for container for the network routes
+        typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator NetworkRoutesI;
+
+        /**
+         * \brief the forwarding table for network.
+         */
+        NetworkRoutes m_networkRoutes;
+
+    protected:
+        void DoDispose() override;
+
+    public:
+        Ptr<Ipv4Route> RouteOutput(Ptr<Packet> p,
+            const Ipv4Header& header,
+            Ptr<NetDevice> oif,
+            Socket::SocketErrno& sockerr) override;    
+
+        bool RouteInput(Ptr<const Packet> p,
+            const Ipv4Header& header,
+            Ptr<const NetDevice> idev,
+            const UnicastForwardCallback& ucb,
+            const MulticastForwardCallback& mcb,
+            const LocalDeliverCallback& lcb,
+            const ErrorCallback& ecb) override;
+
+        void NotifyInterfaceUp(uint32_t interface) override;
+        void NotifyInterfaceDown(uint32_t interface) override;
+        void NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddress address) override;
+        void SetIpv4(Ptr<Ipv4> ipv4) override;
+        void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
+            Time::Unit unit = Time::S) const override;
+
+        /**
+         * \brief Lookup in the forwarding table for destination.
+         * \param dest destination address
+         * \param oif output interface if any (put 0 otherwise)
+         * \return Ipv4Route to route the packet to reach dest address
+         */
+        Ptr<Ipv4Route> LookupStatic(Ipv4Address dest, Ptr<NetDevice> oif = nullptr);
+};
+
+} // namespace wcmp
+} // namespace ns3
+
 
 #endif /* WCMP_STATIC_ROUTING_H */

@@ -35,7 +35,7 @@ WcmpHasher :: getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header) {
     header.GetDestination().Serialize(buf + 4);
     uint16_t port = tcpHeader.GetSourcePort();
     memcpy(buf + 8, &port, 2);
-    uint16_t port = tcpHeader.GetDestinationPort();
+    port = tcpHeader.GetDestinationPort();
     memcpy(buf + 10, &port, 2);
 
     this->m_hasher.clear();
@@ -55,7 +55,7 @@ WcmpHasher :: getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header) {
         header.GetDestination().Serialize(buf + 4);
         uint16_t port = udpHeader.GetSourcePort();
         memcpy(buf + 8, &port, 2);
-        uint16_t port = udpHeader.GetDestinationPort();
+        port = udpHeader.GetDestinationPort();
         memcpy(buf + 10, &port, 2);
 
         this->m_hasher.clear();

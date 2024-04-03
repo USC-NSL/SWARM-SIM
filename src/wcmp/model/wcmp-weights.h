@@ -14,8 +14,6 @@ class WcmpWeights {
      * The main abstraction of WCMP weights on a node.
     */
 
-    WcmpWeights(Ptr<Ipv4> ipv4);
-
     private:
         /**
          * This maps interface index to a pair of (weight, up), where
@@ -29,7 +27,15 @@ class WcmpWeights {
         */
         Ptr<Ipv4> m_ipv4;
 
+        /**
+         * Reset the weights
+        */
+        void reset();
+
     public:
+        WcmpWeights();
+        WcmpWeights(Ptr<Ipv4> ipv4);
+
         uint16_t get_weight(uint32_t if_index) {
             return weights[if_index].first;
         }

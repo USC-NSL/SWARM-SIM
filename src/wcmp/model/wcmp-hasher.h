@@ -23,16 +23,16 @@ typedef enum hash_alg_t {
 
 
 class WcmpHasher {
-    /**
-     * This implements simple packet hashing for ECMP/WCMP
-    */
-    WcmpHasher();
-
     private:
         Hasher m_hasher;
         hash_alg_t hash_algorithm = HASH_IP_TCP_UDP;
 
     public:
+        /**
+         * This implements simple packet hashing for ECMP/WCMP
+        */
+        WcmpHasher();
+        
         hash_alg_t get_hash_alg() {
             return this->hash_algorithm;
         }
