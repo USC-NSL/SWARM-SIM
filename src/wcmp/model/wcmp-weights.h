@@ -7,6 +7,9 @@
 
 
 namespace ns3 {
+
+class Ipv4RoutingTableEntry;
+
 namespace wcmp {
 
 class WcmpWeights {
@@ -68,6 +71,7 @@ class WcmpWeights {
          * and output the interface index for it.
         */
         uint32_t choose(std::vector<uint32_t> output_ifs, uint32_t hash_val);
+        Ipv4RoutingTableEntry* choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val);
 };
 
 } // Namespace wcmp

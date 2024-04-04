@@ -1,4 +1,5 @@
 #include "wcmp-weights.h"
+#include "ns3/ipv4-routing-table-entry.h"
 
 
 namespace ns3 {
@@ -69,6 +70,39 @@ WcmpWeights :: choose(std::vector<uint32_t> output_ifs, uint32_t hash_val) {
 
     std::vector<std::pair<uint32_t, uint32_t>>::iterator it;
     for (it = up_interfaces.begin(); it != up_interfaces.end(); it++)
+        if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX)
+            return it->first;
+    return (--it)->first;
+}
+
+Ipv4RoutingTableEntry* 
+WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val) {
+    // Loop and get the total weight of active interfaces
+    uint32_t sum = 0;
+    uint32_t if_index;
+    std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>> up_entries;
+    for (auto const & it: equal_cost_entries) {
+        if_index = it->GetInterface();
+        // Is the interface up?
+        if (this->weights.at(if_index).second) {
+            sum += this->weights.at(if_index).first;
+            up_entries.push_back(std::make_pair(it, sum));
+        }
+    }
+
+    // This should not happen
+    NS_ABORT_IF(!sum);
+
+    if (up_entries.size() == 0) {
+        return nullptr;
+    }
+    else if (up_entries.size() == 1) {
+        // No need to choose!
+        return up_entries.at(0).first;
+    }
+
+    std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator it;
+    for (it = up_entries.begin(); it != up_entries.end(); it++)
         if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX)
             return it->first;
     return (--it)->first;

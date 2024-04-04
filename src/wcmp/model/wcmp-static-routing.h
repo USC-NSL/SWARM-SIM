@@ -24,15 +24,6 @@ namespace wcmp
 {
 
 class WcmpStaticRouting : public Ipv4RoutingProtocol {
-    /**
-     * \brief Get the type ID.
-     * \return The object TypeId.
-     */
-    static TypeId GetTypeId();
-
-    WcmpStaticRouting();
-    ~WcmpStaticRouting() override;
-
     private:
         /// The IPv4 stack instance
         Ptr<Ipv4> m_ipv4;
@@ -63,10 +54,26 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
          */
         NetworkRoutes m_networkRoutes;
 
+        std::vector<Ipv4RoutingTableEntry*> MultiLpm(Ipv4Address dest);
+
     protected:
         void DoDispose() override;
 
     public:
+        /**
+        * \brief Get the type ID.
+        * \return The object TypeId.
+        */
+        static TypeId GetTypeId();
+
+        WcmpStaticRouting();
+        ~WcmpStaticRouting() override;
+
+        /**
+         * The main lookup function that implements WCMP
+        */
+        Ptr<Ipv4Route> LookupWcmp(Ipv4Address dest, uint32_t hash_val);
+
         Ptr<Ipv4Route> RouteOutput(Ptr<Packet> p,
             const Ipv4Header& header,
             Ptr<NetDevice> oif,

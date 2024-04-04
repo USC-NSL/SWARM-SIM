@@ -85,6 +85,192 @@ WcmpStaticRouting :: DoDispose() {
     Ipv4RoutingProtocol :: DoDispose();
 }
 
+std::vector<Ipv4RoutingTableEntry*> 
+WcmpStaticRouting :: MultiLpm(Ipv4Address dest) {
+    std::vector<Ipv4RoutingTableEntry*> entries;
+    uint16_t longest_mask = 0;
+    uint32_t shortest_metric = 0xffffffff;
+
+    for (auto i = m_networkRoutes.begin(); i != m_networkRoutes.end(); i++)
+    {
+        Ipv4RoutingTableEntry* j = i->first;
+        uint32_t metric = i->second;
+        Ipv4Mask mask = (j)->GetDestNetworkMask();
+        uint16_t masklen = mask.GetPrefixLength();
+        Ipv4Address entry = (j)->GetDestNetwork();
+
+        if (mask.IsMatch(dest, entry))
+        {
+            // Found a route ...
+
+            if (masklen < longest_mask)
+            {
+                // Short match
+                continue;
+            }
+            else if (masklen > longest_mask)
+            {
+                // Reset metric if longer masklen
+                shortest_metric = 0xffffffff;
+            }
+            else {
+                longest_mask = masklen;
+
+                if (metric > shortest_metric)
+                {
+                    // Metric is larger, skip
+                    continue;
+                }
+                else if (metric < shortest_metric) {
+                    // Better path, clear the collected entries
+                    entries.clear();
+                }
+                entries.push_back(j);
+            }
+        }
+    }
+    
+    /**
+     * Some of the entries here might be bound to a down interface.
+     * During lookup, WcmpWeights will handle that.
+    */
+
+    return entries;
+}
+
+Ptr<Ipv4Route>
+WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
+{   
+    // Get equal cost LPM paths
+    std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
+
+    if (!entries.size()) {
+        // No routes exist
+        return nullptr;
+    }
+
+    // Choose a routing table entry
+    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val);
+
+    if (!chosen) {
+        // All interfaces are down
+        return nullptr;
+    }
+
+    // Output the routing entry
+    Ptr<Ipv4Route> rtentry = Create<Ipv4Route>();
+    rtentry->SetDestination(chosen->GetDest());
+    rtentry->SetSource(m_ipv4->SourceAddressSelection(chosen->GetInterface(), chosen->GetDest()));
+    rtentry->SetGateway(chosen->GetGateway());
+    rtentry->SetOutputDevice(m_ipv4->GetNetDevice(chosen->GetInterface()));
+
+    return rtentry;
+}
+
+Ptr<Ipv4Route>
+WcmpStaticRouting :: RouteOutput(Ptr<Packet> p,
+                               const Ipv4Header& header,
+                               Ptr<NetDevice> oif,
+                               Socket::SocketErrno& sockerr)
+{
+    NS_LOG_FUNCTION(this << p << header << oif << sockerr);
+    Ipv4Address destination = header.GetDestination();
+    Ptr<Ipv4Route> rtentry = nullptr;
+
+    if (destination.IsLocalMulticast())
+    {
+        NS_ABORT_MSG("Multicast not handled yet!");
+    }
+
+    if (oif) {
+        NS_ABORT_MSG("Will not implement per-interface output yet!");
+    }
+
+    // Hash the packet
+    uint32_t hash_val = this->hasher.getHash(p, header);
+
+    // Lookup for a route
+    rtentry = LookupWcmp(destination, hash_val);
+
+    if (rtentry)
+    {
+        sockerr = Socket::ERROR_NOTERROR;
+    }
+    else
+    {
+        sockerr = Socket::ERROR_NOROUTETOHOST;
+    }
+    return rtentry;
+}
+
+
+bool
+WcmpStaticRouting :: RouteInput(Ptr<const Packet> p,
+                              const Ipv4Header& ipHeader,
+                              Ptr<const NetDevice> idev,
+                              const UnicastForwardCallback& ucb,
+                              const MulticastForwardCallback& mcb,
+                              const LocalDeliverCallback& lcb,
+                              const ErrorCallback& ecb)
+{
+    NS_ASSERT(m_ipv4);
+    // Check if input device supports IP
+    NS_ASSERT(m_ipv4->GetInterfaceForDevice(idev) >= 0);
+    uint32_t iif = m_ipv4->GetInterfaceForDevice(idev);
+
+    // Multicast recognition; handle local delivery here
+
+    if (ipHeader.GetDestination().IsMulticast())
+    {
+        NS_ABORT_MSG("Multicast not implemented yet");
+    }
+
+    if (m_ipv4->IsDestinationAddress(ipHeader.GetDestination(), iif))
+    {
+        if (!lcb.IsNull())
+        {
+            NS_LOG_LOGIC("Local delivery to " << ipHeader.GetDestination());
+            lcb(p, ipHeader, iif);
+            return true;
+        }
+        else
+        {
+            // The local delivery callback is null.  This may be a multicast
+            // or broadcast packet, so return false so that another
+            // multicast routing protocol can handle it.  It should be possible
+            // to extend this to explicitly check whether it is a unicast
+            // packet, and invoke the error callback if so
+            return false;
+        }
+    }
+
+    // Check if input device supports IP forwarding
+    if (!m_ipv4->IsForwarding(iif))
+    {
+        NS_LOG_LOGIC("Forwarding disabled for this interface");
+        ecb(p, ipHeader, Socket::ERROR_NOROUTETOHOST);
+        return true;
+    }
+
+    // Hash the packet
+    uint32_t hash_val = this->hasher.getHash(p, ipHeader);
+
+    // Next, try to find a route
+    Ptr<Ipv4Route> rtentry = LookupWcmp(ipHeader.GetDestination(), hash_val);
+
+    if (rtentry)
+    {
+        NS_LOG_LOGIC("Found unicast destination- calling unicast callback");
+        ucb(rtentry, p, ipHeader); // unicast forwarding callback
+        return true;
+    }
+    else
+    {
+        NS_LOG_LOGIC("Did not find unicast destination- returning false");
+        return false; // Let other routing protocols try to handle this
+    }
+}
+
 void 
 WcmpStaticRouting :: NotifyInterfaceUp(uint32_t i) {
     /**
@@ -166,9 +352,9 @@ WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Un
 
     *os << "Node: " << m_ipv4->GetObject<Node>()->GetId() << ", Time: " << Now().As(unit)
         << ", Local time: " << m_ipv4->GetObject<Node>()->GetLocalTime().As(unit)
-        << ", Ipv4StaticRouting table" << std::endl;
+        << ", WcmpStaticRouting table" << std::endl;
 
-    // Implement this
+    // TODO: Implement this
 
     *os << std::endl;
     // Restore the previous ostream state
