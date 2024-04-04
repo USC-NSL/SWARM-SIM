@@ -271,6 +271,46 @@ WcmpStaticRouting :: RouteInput(Ptr<const Packet> p,
     }
 }
 
+bool
+WcmpStaticRouting :: LookupRoute(const Ipv4RoutingTableEntry& route, uint32_t metric)
+{
+    for (auto j = m_networkRoutes.begin(); j != m_networkRoutes.end(); j++)
+    {
+        Ipv4RoutingTableEntry* rtentry = j->first;
+
+        if (rtentry->GetDest() == route.GetDest() &&
+            rtentry->GetDestNetworkMask() == route.GetDestNetworkMask() &&
+            rtentry->GetGateway() == route.GetGateway() &&
+            rtentry->GetInterface() == route.GetInterface() && j->second == metric)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void 
+WcmpStaticRouting :: AddNetworkRouteTo(Ipv4Address network,
+    Ipv4Mask networkMask,
+    uint32_t interface,
+    uint32_t metric)
+{
+    Ipv4RoutingTableEntry route =
+        Ipv4RoutingTableEntry::CreateNetworkRouteTo(network, networkMask, interface);
+    if (!LookupRoute(route, metric))
+    {
+        auto routePtr = new Ipv4RoutingTableEntry(route);
+
+        m_networkRoutes.emplace_back(routePtr, metric);
+    }
+}
+
+void
+WcmpStaticRouting :: AddWildcardRoute(int32_t interface, uint32_t metric)
+{
+    AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask::GetZero(), interface, metric);
+}
+
 void 
 WcmpStaticRouting :: NotifyInterfaceUp(uint32_t i) {
     /**

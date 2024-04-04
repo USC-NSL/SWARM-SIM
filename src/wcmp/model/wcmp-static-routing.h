@@ -49,21 +49,17 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Iterator for container for the network routes
         typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator NetworkRoutesI;
 
-        /**
-         * \brief the forwarding table for network.
-         */
+        /// The forwarding table for network.
         NetworkRoutes m_networkRoutes;
 
         std::vector<Ipv4RoutingTableEntry*> MultiLpm(Ipv4Address dest);
+
+        bool LookupRoute(const Ipv4RoutingTableEntry& route, uint32_t metric);
 
     protected:
         void DoDispose() override;
 
     public:
-        /**
-        * \brief Get the type ID.
-        * \return The object TypeId.
-        */
         static TypeId GetTypeId();
 
         WcmpStaticRouting();
@@ -95,13 +91,12 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         void PrintRoutingTable(Ptr<OutputStreamWrapper> stream,
             Time::Unit unit = Time::S) const override;
 
-        /**
-         * \brief Lookup in the forwarding table for destination.
-         * \param dest destination address
-         * \param oif output interface if any (put 0 otherwise)
-         * \return Ipv4Route to route the packet to reach dest address
-         */
-        Ptr<Ipv4Route> LookupStatic(Ipv4Address dest, Ptr<NetDevice> oif = nullptr);
+        void AddNetworkRouteTo(Ipv4Address network,
+                            Ipv4Mask networkMask,
+                            uint32_t interface,
+                            uint32_t metric = 0);
+
+        void AddWildcardRoute(int32_t interface, uint32_t metric);
 };
 
 } // namespace wcmp
