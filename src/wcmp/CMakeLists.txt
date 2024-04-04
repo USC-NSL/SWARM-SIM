@@ -11,4 +11,6 @@ build_lib(
     model/wcmp-hasher.h
     model/wcmp-static-routing.h
   LIBRARIES_TO_LINK ${libinternet}
+  TEST_SOURCES
+    test/wcmp-static-routing-throughput-test.cc
 )

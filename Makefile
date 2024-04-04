@@ -18,7 +18,7 @@ copy: check
 		cp -R $$dir/* ns3/$$dir/ ;\
 	done
 
-configure: check
+configure: copy
 	ns3/ns3 configure
 
 build: copy
@@ -30,3 +30,7 @@ clean:
 
 purge: check clean
 	ns3/ns3 clean
+
+buildtest: copy
+	ns3/ns3 configure --enable-tests
+	ns3/ns3 build 
