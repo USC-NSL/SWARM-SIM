@@ -24,6 +24,13 @@ WcmpWeights :: reset () {
     }
 }
 
+void 
+WcmpWeights :: set_ipv4(Ptr<Ipv4> ipv4) {
+    NS_ABORT_IF(m_ipv4);
+    this->m_ipv4 = ipv4;
+    reset();
+}
+
 uint32_t
 WcmpWeights :: choose(std::vector<uint32_t> output_ifs, uint32_t hash_val) {
     // Loop and get the total weight of active interfaces
@@ -39,12 +46,30 @@ WcmpWeights :: choose(std::vector<uint32_t> output_ifs, uint32_t hash_val) {
     // This should not happen
     NS_ABORT_IF(!sum);
 
-    // Now, we have a list of (index, upper_bound), we get a random number
-    // and check in which chunk it lands.
+    if (up_interfaces.size() == 0) {
+        // All interfaces are down. We output interface 0.
+        // Interface 0 is loopback, so it shouldn't be used anyway and the caller
+        // can see from this that the packet needs to be dropped.
+        return 0;
+    }
+    else if (up_interfaces.size() == 1) {
+        // No need to choose!
+        return up_interfaces.at(0).first;
+    }
+
+    /**
+     * We'll be doing this per-packet, so even small time savers are helpful.
+     * We avoid doing floating-point division here for that reason, to this end,
+     * doing this normall would entail dividing the hash value `H` by the maximum 
+     * uint32_t value, `M` and getting r := H/M * (sum), and seeing where that
+     * lands on the bounds.
+     * To do this without floats, we will just compare r * M = (H * sum) to each
+     * bound times M.
+    */
 
     std::vector<std::pair<uint32_t, uint32_t>>::iterator it;
     for (it = up_interfaces.begin(); it != up_interfaces.end(); it++)
-        if (hash_val < it->second)
+        if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX)
             return it->first;
     return (--it)->first;
 }

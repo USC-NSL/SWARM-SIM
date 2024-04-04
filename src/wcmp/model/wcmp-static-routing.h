@@ -17,6 +17,9 @@
 
 namespace ns3
 {
+
+class Node;
+
 namespace wcmp
 {
 
@@ -36,6 +39,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// Hash algorithm to use
         hash_alg_t m_hash_alg;
+
+        /// Whether or not to add a route when an interface comes up
+        bool m_add_route_on_up;
 
         /// The WCMP hash calculator
         WcmpHasher hasher;

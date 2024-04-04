@@ -57,6 +57,13 @@ class WcmpWeights {
         }
 
         /**
+         * This function sets the IPv4 stack instance.
+         * It is not safe to call this multiple times and it will kill
+         * the program if there already is a stack.
+        */
+        void set_ipv4(Ptr<Ipv4> ipv4);
+
+        /**
          * Given a list of interface indices, choose one according to the given hash
          * and output the interface index for it.
         */
