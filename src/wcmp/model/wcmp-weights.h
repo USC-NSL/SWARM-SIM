@@ -23,7 +23,7 @@ class WcmpWeights {
          *  - weight is the actual weight in uint16_t
          *  - up is a boolean, signifying whether or not the interface is up
         */
-        std::map<uint32_t, std::pair<uint16_t, bool>> weights;
+        mutable std::map<uint32_t, std::pair<uint16_t, bool>> weights;
 
         /**
          * The pointer to the IPv4 stack object
@@ -39,7 +39,7 @@ class WcmpWeights {
         WcmpWeights();
         WcmpWeights(Ptr<Ipv4> ipv4);
 
-        uint16_t get_weight(uint32_t if_index) {
+        uint16_t get_weight(uint32_t if_index) const {
             return weights[if_index].first;
         }
 
@@ -72,6 +72,12 @@ class WcmpWeights {
         */
         uint32_t choose(std::vector<uint32_t> output_ifs, uint32_t hash_val);
         Ipv4RoutingTableEntry* choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val);
+
+        /**
+         * Add a new interface to the list of tracked interfaces
+         * If the interface exists, this does nothing.
+        */
+        void add_interface(uint32_t if_index, uint16_t weight = (uint16_t) 1);
 };
 
 } // Namespace wcmp

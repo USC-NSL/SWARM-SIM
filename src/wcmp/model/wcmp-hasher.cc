@@ -80,6 +80,34 @@ WcmpHasher :: getHash(Ptr<const Packet> p, const Ipv4Header& header) {
             NS_ABORT_MSG("Bad hash alg");
     }
 }
+
+std::string 
+WcmpHasher :: dump_packet(Ptr<const Packet> p, const Ipv4Header& header) {
+    std::string out;
+    
+    if (header.GetProtocol() == UDP_PROTOCOL) {
+        out += "UDP: ";
+        UdpHeader udpHeader;;
+        p->PeekHeader(udpHeader);
+        
+        out += "Source = ";
+        out += std::to_string(udpHeader.GetSourcePort());
+        out += " Destination = ";
+        out += std::to_string(udpHeader.GetDestinationPort());
+    }
+    else {
+        out += "TCP: ";
+        TcpHeader tcpHeader;;
+        p->PeekHeader(tcpHeader);
+        
+        out += "Source = ";
+        out += std::to_string(tcpHeader.GetSourcePort());
+        out += " Destination = ";
+        out += std::to_string(tcpHeader.GetDestinationPort());
+    }
+
+    return out;
+}
     
 } // namespace wcmp
 } // namespace ns3

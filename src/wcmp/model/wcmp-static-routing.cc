@@ -1,5 +1,6 @@
 #include "wcmp-static-routing.h"
 #include "ns3/enum.h"
+#include "ns3/names.h"
 #include "ns3/node.h"
 #include "ns3/boolean.h"
 #include "ns3/simulator.h"
@@ -80,7 +81,7 @@ WcmpStaticRouting :: SetIpv4(Ptr<Ipv4> ipv4)
 
 void
 WcmpStaticRouting :: DoDispose() {
-    for (auto route = this->m_networkRoutes.begin(); route != this->m_networkRoutes.end(); this->m_networkRoutes.erase(route)) {
+    for (auto route = this->m_networkRoutes.begin(); route != this->m_networkRoutes.end(); route = this->m_networkRoutes.erase(route)) {
         delete (route->first);
     }
     this->m_ipv4 = nullptr;
@@ -101,13 +102,17 @@ WcmpStaticRouting :: MultiLpm(Ipv4Address dest) {
         uint16_t masklen = mask.GetPrefixLength();
         Ipv4Address entry = (j)->GetDestNetwork();
 
+        NS_LOG_LOGIC("LPM check for entry " << entry << "/" << (j)->GetDestNetworkMask() 
+        << " (" << metric << ")" << " --> " << j->GetInterface() << " against " << dest);
+
         if (mask.IsMatch(dest, entry))
         {
             // Found a route ...
-
+            NS_LOG_LOGIC("Found route");
             if (masklen < longest_mask)
             {
                 // Short match
+                NS_LOG_LOGIC("Short match");
                 continue;
             }
             else if (masklen > longest_mask)
@@ -115,20 +120,23 @@ WcmpStaticRouting :: MultiLpm(Ipv4Address dest) {
                 // Reset metric if longer masklen
                 shortest_metric = 0xffffffff;
             }
-            else {
-                longest_mask = masklen;
+            
+            longest_mask = masklen;
 
-                if (metric > shortest_metric)
-                {
-                    // Metric is larger, skip
-                    continue;
-                }
-                else if (metric < shortest_metric) {
-                    // Better path, clear the collected entries
-                    entries.clear();
-                }
-                entries.push_back(j);
+            if (metric > shortest_metric)
+            {
+                // Metric is larger, skip
+                NS_LOG_LOGIC("Metric big");
+                continue;
             }
+            else if (metric < shortest_metric) {
+                // Better path, clear the collected entries
+                entries.clear();
+            }
+
+            shortest_metric = metric;
+
+            entries.push_back(j);
         }
     }
     
@@ -148,6 +156,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
 
     if (!entries.size()) {
         // No routes exist
+        NS_LOG_LOGIC("LPM returned empty for " << dest);
         return nullptr;
     }
 
@@ -156,6 +165,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
 
     if (!chosen) {
         // All interfaces are down
+        NS_LOG_LOGIC("All interfaces are down");
         return nullptr;
     }
 
@@ -165,6 +175,8 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
     rtentry->SetSource(m_ipv4->SourceAddressSelection(chosen->GetInterface(), chosen->GetDest()));
     rtentry->SetGateway(chosen->GetGateway());
     rtentry->SetOutputDevice(m_ipv4->GetNetDevice(chosen->GetInterface()));
+
+    NS_LOG_LOGIC("WCMP lookup chose " << chosen->GetInterface());
 
     return rtentry;
 }
@@ -190,6 +202,7 @@ WcmpStaticRouting :: RouteOutput(Ptr<Packet> p,
 
     // Hash the packet
     uint32_t hash_val = this->hasher.getHash(p, header);
+    NS_LOG_LOGIC("WCMP hash for packet = " << hash_val);
 
     // Lookup for a route
     rtentry = LookupWcmp(destination, hash_val);
@@ -256,6 +269,7 @@ WcmpStaticRouting :: RouteInput(Ptr<const Packet> p,
 
     // Hash the packet
     uint32_t hash_val = this->hasher.getHash(p, ipHeader);
+    NS_LOG_LOGIC("WCMP hash for packet = " << hash_val);
 
     // Next, try to find a route
     Ptr<Ipv4Route> rtentry = LookupWcmp(ipHeader.GetDestination(), hash_val);
@@ -321,6 +335,7 @@ WcmpStaticRouting :: NotifyInterfaceUp(uint32_t i) {
      * For debug and some other things, we optionally let that functionality be here,
      * but the only thing that we always do, is update the WcmpWeight object.
     */
+    weights.add_interface(i);
 
     this->weights.set_state(i, true);
     if (this->m_add_route_on_up) {
@@ -347,6 +362,7 @@ WcmpStaticRouting :: NotifyAddAddress(uint32_t interface, Ipv4InterfaceAddress a
     /**
      * Again, the only thing we need to is add a route if we have to
     */
+    weights.add_interface(interface);
 
     if (this->m_add_route_on_up) {
         // TODO: Add route!
@@ -382,6 +398,40 @@ WcmpStaticRouting :: NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddres
     }
 }
 
+uint32_t 
+WcmpStaticRouting :: GetNRoutes() const {
+    return this->m_networkRoutes.size();
+}
+
+uint32_t 
+WcmpStaticRouting :: GetMetric(uint32_t index) const{
+    uint32_t tmp = 0;
+    for (auto j = m_networkRoutes.begin(); j != m_networkRoutes.end(); j++)
+    {
+        if (tmp == index)
+        {
+            return j->second;
+        }
+        tmp++;
+    }
+    return 0;
+}
+
+Ipv4RoutingTableEntry 
+WcmpStaticRouting :: GetRoute(uint32_t index) const{
+    uint32_t tmp = 0;
+    for (auto j = m_networkRoutes.begin(); j != m_networkRoutes.end(); j++)
+    {
+        if (tmp == index)
+        {
+            return j->first;
+        }
+        tmp++;
+    }
+
+    return nullptr;
+}
+
 void
 WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Unit unit) const
 {
@@ -396,8 +446,37 @@ WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Un
         << ", Local time: " << m_ipv4->GetObject<Node>()->GetLocalTime().As(unit)
         << ", WcmpStaticRouting table" << std::endl;
 
-    // TODO: Implement this
-    *os << "WCMP Routing Table: empty" << std::endl << std::endl;
+    if (GetNRoutes()) {
+        *os << "Destination     Metric Iface    Weight State"
+            << std::endl;
+        for (uint32_t j = 0; j < m_networkRoutes.size(); ++j) {
+            std::ostringstream dest;
+            Ipv4RoutingTableEntry entry = GetRoute(j);
+            dest << entry.GetDest();
+            *os << std::setw(16) << dest.str();
+            *os << std::setw(7) << GetMetric(j);
+            
+            if (!Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface())).empty())
+            {
+                *os << std::setw(9) << Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface()));
+            }
+            else
+            {
+                *os << std::setw(9) << entry.GetInterface();
+            }
+
+            *os << std::setw(7) << weights.get_weight(entry.GetInterface());
+
+            if (m_ipv4->IsUp(entry.GetInterface())) {
+                *os << "Up";
+            }
+            else {
+                *os << "Down";
+            }
+
+            *os << std::endl;
+        }
+    }
 
     *os << std::endl;
     // Restore the previous ostream state

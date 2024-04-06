@@ -45,6 +45,7 @@ class WcmpHasher {
         uint32_t getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header);
         uint32_t getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header);
         uint32_t getHash(Ptr<const Packet> p, const Ipv4Header& header);
+        std::string dump_packet(Ptr<const Packet> p, const Ipv4Header& header);
 };
 
 } // namespace wcmp

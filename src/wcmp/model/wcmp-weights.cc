@@ -3,6 +3,9 @@
 
 
 namespace ns3 {
+
+NS_LOG_COMPONENT_DEFINE("WcmpWeights");
+
 namespace wcmp {
 
 WcmpWeights :: WcmpWeights () {
@@ -80,6 +83,9 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
     // Loop and get the total weight of active interfaces
     uint32_t sum = 0;
     uint32_t if_index;
+
+    NS_LOG_LOGIC("Choosing from  " << equal_cost_entries.size() << " equal cost entries");
+
     std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>> up_entries;
     for (auto const & it: equal_cost_entries) {
         if_index = it->GetInterface();
@@ -88,24 +94,41 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
             sum += this->weights.at(if_index).first;
             up_entries.push_back(std::make_pair(it, sum));
         }
+        else {
+            NS_LOG_LOGIC("Ignoring interface " << if_index);
+        }
     }
 
     // This should not happen
     NS_ABORT_IF(!sum);
 
     if (up_entries.size() == 0) {
+        NS_LOG_LOGIC("No Up entries");
         return nullptr;
     }
     else if (up_entries.size() == 1) {
         // No need to choose!
+        NS_LOG_LOGIC("Just a single Up entry");
         return up_entries.at(0).first;
     }
 
     std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator it;
-    for (it = up_entries.begin(); it != up_entries.end(); it++)
-        if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX)
+    for (it = up_entries.begin(); it != up_entries.end(); it++) {
+        NS_LOG_LOGIC("Comparing " << (uint64_t) hash_val * sum << " and " << (uint64_t) it->second * UINT32_MAX);
+        if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX) {
             return it->first;
+        }
+    }
     return (--it)->first;
+}
+
+void
+WcmpWeights :: add_interface(uint32_t if_index, uint16_t weight) {
+    if (this->weights.count(if_index))
+        return;
+    this->weights[if_index] = std::make_pair(
+        (uint16_t) 1, this->m_ipv4->IsUp(if_index)
+    );
 }
     
 } // namespace wcmp

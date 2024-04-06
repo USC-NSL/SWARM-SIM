@@ -97,6 +97,10 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
                             uint32_t metric = 0);
 
         void AddWildcardRoute(int32_t interface, uint32_t metric);
+
+        uint32_t GetNRoutes() const;
+        uint32_t GetMetric(uint32_t index) const;
+        Ipv4RoutingTableEntry GetRoute(uint32_t index) const;
 };
 
 } // namespace wcmp
