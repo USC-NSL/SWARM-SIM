@@ -15,6 +15,8 @@ NS_LOG_COMPONENT_DEFINE("WcmpStaticRouting");
 namespace wcmp
 {
 
+NS_OBJECT_ENSURE_REGISTERED(WcmpStaticRouting);
+
 TypeId
 WcmpStaticRouting :: GetTypeId() {
     static TypeId tid = 
@@ -395,6 +397,7 @@ WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Un
         << ", WcmpStaticRouting table" << std::endl;
 
     // TODO: Implement this
+    *os << "WCMP Routing Table: empty" << std::endl << std::endl;
 
     *os << std::endl;
     // Restore the previous ostream state

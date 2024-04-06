@@ -7,6 +7,7 @@
 #include "ns3/simple-net-device.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/internet-stack-helper.h"
+#include "ns3/ipv4-list-routing-helper.h"
 #include "ns3/ipv4-static-routing-helper.h"
 #include "ns3/simple-net-device-helper.h"
 #include "ns3/wcmp-static-routing-helper.h"
@@ -29,14 +30,15 @@ class WcmpStaticRoutingThroughputTest : public TestCase {
         typedef void (*send_method)(Ptr<Socket>, std::string);
         typedef void (*recv_method)(Ptr<Socket>);
 
-    private:
         void DoRun() override;
+
+    private:
         void addFabricInterfaces(std::vector<NetDeviceContainer>);
 };
 
 
 WcmpStaticRoutingThroughputTest :: WcmpStaticRoutingThroughputTest() 
-    : TestCase("A throughput test to see if WCMP actually works")
+    : TestCase("WCMP throughput test")
 {
 }
 
@@ -72,21 +74,8 @@ WcmpStaticRoutingThroughputTest :: SendData(Ptr<Socket> socket, std::string to)
                                    to);
     Simulator::Stop(Seconds(66));
     Simulator::Run();
+    Simulator::Destroy();
 }
-
-class WcmpStaticRoutingTestSuite : public TestSuite
-{
-  public:
-    WcmpStaticRoutingTestSuite();
-};
-
-WcmpStaticRoutingTestSuite::WcmpStaticRoutingTestSuite()
-    : TestSuite("wcmp-static-routing", UNIT)
-{
-    AddTestCase(new WcmpStaticRoutingTestSuite, TestCase::QUICK);
-}
-
-static WcmpStaticRoutingTestSuite wcmpStaticRoutingTestSuite;
 
 /**
  * This is a simple series of tests to see if WCMP integrated correctly
@@ -140,11 +129,22 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     Ptr<Node> L2 = CreateObject<Node>();
     Ptr<Node> L3 = CreateObject<Node>();
 
-    NodeContainer c = NodeContainer(A, R, B, L1, L2, L3);
+    NodeContainer normal = NodeContainer(A, B, L1, L2, L3);
 
     // Install basic Ipv4 static routing
     InternetStackHelper internet;
-    internet.Install(c);
+    internet.Install(normal);
+
+    // Install the WCMP stack on R
+    WcmpStaticRoutingHelper wcmpHelper;
+    Ipv4StaticRoutingHelper staticHelper;
+    Ipv4ListRoutingHelper listHelper;
+    InternetStackHelper interetHelper;
+
+    listHelper.Add(staticHelper, 0);
+    listHelper.Add(wcmpHelper, -20);
+    interetHelper.SetRoutingHelper(listHelper);
+    interetHelper.Install(R);
 
     // simple links
     NodeContainer AR = NodeContainer(A, R);
@@ -202,13 +202,9 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     ipv4B->SetMetric(ifIndexB, 1);
     ipv4B->SetUp(ifIndexB);
 
-    WcmpStaticRoutingHelper wcmpHelper;
-    Ipv4StaticRoutingHelper staticHelper;
-    InternetStackHelper interetHelper;
-
-    // Install the WCMP stack on R
-    interetHelper.SetRoutingHelper(wcmpHelper);
-    interetHelper.Install(R);
+    Ptr<OutputStreamWrapper> routingStream =
+        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    Ipv4ListRoutingHelper::PrintRoutingTableAt(Now(), R, routingStream);
 
     // Create static routes on A, B and Li
     Ptr<wcmp::WcmpStaticRouting> wcmp;
@@ -235,9 +231,7 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     // Create the UDP sockets
     Ptr<SocketFactory> rxSocketFactory = B->GetObject<UdpSocketFactory>();
     Ptr<Socket> rxSocket = rxSocketFactory->CreateSocket();
-    NS_TEST_EXPECT_MSG_EQ(rxSocket->Bind(InetSocketAddress(ipB, 1234)),
-                          0,
-                          "trivial");
+    NS_ABORT_UNLESS(rxSocket->Bind(InetSocketAddress(ipB, 1234)) == 0);
     rxSocket->SetRecvCallback(MakeCallback(&WcmpStaticRoutingThroughputTest::ReceivePkt, this));
 
     Ptr<SocketFactory> txSocketFactory = A->GetObject<UdpSocketFactory>();
@@ -248,8 +242,19 @@ WcmpStaticRoutingThroughputTest :: DoRun()
 
     // Unicast test
     SendData(txSocket, "10.0.0.2");
-    NS_TEST_EXPECT_MSG_EQ(m_receivedPacket->GetSize(),
-                          123,
-                          "Static routing with /32 did not deliver all packets.");
+    NS_ABORT_UNLESS(m_receivedPacket->GetSize() == 123);
+}
 
-}  
+class WcmpStaticRoutingTestSuite : public TestSuite
+{
+    public:
+        WcmpStaticRoutingTestSuite();
+};
+
+WcmpStaticRoutingTestSuite::WcmpStaticRoutingTestSuite()
+    : TestSuite("wcmp-static-routing", UNIT)
+{
+    AddTestCase(new WcmpStaticRoutingThroughputTest(), TestCase::QUICK);
+}
+
+static WcmpStaticRoutingTestSuite wcmpStaticRoutingTestSuite;

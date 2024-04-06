@@ -1,8 +1,11 @@
-.PHONY: copy check clean purge configure
+.PHONY: copy check clean purge configure test
 
+# To speedup builds, we only enable what we need
+INCLUDE_MODULES = "wcmp;internet;netanim;"
+
+TEST_MODULES = "wcmp"
 
 DIRS = src scratch
-
 
 check:
 	@echo "Checking for the ns3 symlink"
@@ -15,11 +18,11 @@ check:
 
 copy: check
 	@for dir in $(DIRS); do \
-		cp -R $$dir/* ns3/$$dir/ ;\
+		rsync -av $$dir/* ns3/$$dir/ ;\
 	done
 
 configure: copy
-	ns3/ns3 configure
+	ns3/ns3 configure --enable-tests --enable-modules $(INCLUDE_MODULES) --filter-module-examples-and-tests $(TEST_MODULES)
 
 build: copy
 	@echo "Building swarm simulation"
@@ -31,6 +34,3 @@ clean:
 purge: check clean
 	ns3/ns3 clean
 
-buildtest: copy
-	ns3/ns3 configure --enable-tests
-	ns3/ns3 build 
