@@ -59,7 +59,7 @@ WcmpHasher :: getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header) {
         memcpy(buf + 10, &port, 2);
 
         this->m_hasher.clear();
-        return this->m_hasher.GetHash32((char *) buf, 13);
+        return this->m_hasher.GetHash32((char *) buf, 12);
     }
     else {
         return this->getHashIpv4Tcp(p, header);

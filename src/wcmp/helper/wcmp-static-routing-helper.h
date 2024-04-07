@@ -18,6 +18,7 @@ class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
         Ptr<Ipv4RoutingProtocol> Create(Ptr<Node> node) const override;
 
         Ptr<wcmp::WcmpStaticRouting> GetWcmpStaticRouting(Ptr<Ipv4> ipv4) const;
+        void SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t weight);
 
     private:
         ObjectFactory m_factory;

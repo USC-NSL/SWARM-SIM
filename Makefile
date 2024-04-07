@@ -1,7 +1,7 @@
 .PHONY: copy check clean purge configure test
 
 # To speedup builds, we only enable what we need
-INCLUDE_MODULES = "wcmp;internet;netanim;"
+INCLUDE_MODULES = "wcmp;internet;netanim;flow-monitor"
 
 TEST_MODULES = "wcmp"
 
@@ -30,6 +30,9 @@ build: copy
 
 clean:
 	@rm -f *.o
+	@rm -f ns3/*.pcap
+	@rm -f ns3/*.xml
+	@rm -f ns3/*.routes
 
 purge: check clean
 	ns3/ns3 clean

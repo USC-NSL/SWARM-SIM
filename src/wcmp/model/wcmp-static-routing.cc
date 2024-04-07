@@ -322,9 +322,14 @@ WcmpStaticRouting :: AddNetworkRouteTo(Ipv4Address network,
 }
 
 void
-WcmpStaticRouting :: AddWildcardRoute(int32_t interface, uint32_t metric)
+WcmpStaticRouting :: AddWildcardRoute(uint32_t interface, uint32_t metric)
 {
     AddNetworkRouteTo(Ipv4Address("0.0.0.0"), Ipv4Mask::GetZero(), interface, metric);
+}
+
+void 
+WcmpStaticRouting :: SetInterfaceWeight(uint32_t interface, uint16_t weight) {
+    this->weights.set_weight(interface, weight);
 }
 
 void 

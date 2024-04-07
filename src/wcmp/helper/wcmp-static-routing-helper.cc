@@ -60,4 +60,9 @@ WcmpStaticRoutingHelper :: GetWcmpStaticRouting(Ptr<Ipv4> ipv4) const
     return nullptr;
 }
 
+void 
+WcmpStaticRoutingHelper :: SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t weight) {
+    GetWcmpStaticRouting(ipv4)->SetInterfaceWeight(interface, weight);
+}
+
 } // namespace ns3
