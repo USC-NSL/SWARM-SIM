@@ -75,6 +75,12 @@ typedef enum topology_level_t {
 // WCMP routing priority
 #define WCMP_ROUTING_PRIORITY -20
 
+// Use MPI
+#define ENABLE_MPI 0
+
+// Drop tail queue maximum length
+const uint32_t MAX_PACKET_PER_QUEUE = 10;
+
 /**
  * The struct that will keep the topology parameters
 */

@@ -4,7 +4,9 @@
 #include "ns3/wcmp-static-routing-helper.h"
 
 
+
 using namespace ns3;
+
 NS_LOG_COMPONENT_DEFINE(COMPONENT_NAME);
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
@@ -640,6 +642,13 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
 
 int main(int argc, char *argv[]) {
     Time::SetResolution(Time::US);
+
+    Config::SetDefault("ns3::DropTailQueue::MaxPackets", IntegerValue(MAX_PACKET_PER_QUEUE));
+
+    #if ENABLE_MPI
+    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+    MpiINter
+    #endif
 
     topolgoy_descriptor topo_params;
 

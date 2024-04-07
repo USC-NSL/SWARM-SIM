@@ -2,6 +2,7 @@
 
 # To speedup builds, we only enable what we need
 INCLUDE_MODULES = "wcmp;internet;netanim;flow-monitor"
+INCLUDE_MODULES_MPI = "wcmp;internet;netanim;flow-monitor;mpi"
 
 TEST_MODULES = "wcmp"
 
@@ -23,6 +24,9 @@ copy: check
 
 configure: copy
 	ns3/ns3 configure --enable-tests --enable-modules $(INCLUDE_MODULES) --filter-module-examples-and-tests $(TEST_MODULES)
+
+configure-mpi:
+	ns3/ns3 configure --enable-modules $(INCLUDE_MODULES_MPI) -d optimized --enable-mpi --enable-examples
 
 build: copy
 	@echo "Building swarm simulation"
