@@ -1,7 +1,7 @@
 #include "swarm.h"
 #include "ns3/applications-module.h"
-#include "ns3/point-to-point-module.h"
 #include "ns3/mobility-helper.h"
+#include "ns3/wcmp-static-routing-helper.h"
 
 
 using namespace ns3;
@@ -84,12 +84,11 @@ void ClosTopology :: createTopology() {
     internet.Install(coreSwitchesEven);
     internet.Install(coreSwitchesOdd);
     for (uint32_t i = 0; i < this->params.numPods; i++) {
-        internet.Install(this->aggSwitches[i]);
-        internet.Install(this->edgeSwitches[i]);
         for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
             internet.Install(this->servers[i * numAggAndEdgeeSwitchesPerPod + j]);
         }
     }
+    this->installWcmpStack();
 }
 
 void ClosTopology :: createLinks() {
@@ -142,7 +141,9 @@ void ClosTopology :: createLinks() {
     }
 
     // Edge to Server links
-    this->connectServers();
+    this->connectServers(p2p);
+
+    // p2p.EnablePcapAll("swarm-pcap");
 
     // Animate?
     if (this->params.animate) {
@@ -167,13 +168,8 @@ void ClosTopology :: createServers() {
     }
 }
 
-void ClosTopology :: connectServers() {
+void ClosTopology :: connectServers(PointToPointHelper p2p) {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
-
-    // All links have the same spec
-    PointToPointHelper p2p;
-    p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(this->params.linkRate) + "Gbps"));
-    p2p.SetChannelAttribute("Delay", StringValue(std::to_string(this->params.linkDelay) + "us"));
 
     uint32_t tor_index, server_index;
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
@@ -186,7 +182,7 @@ void ClosTopology :: connectServers() {
                 p2pContainer.Add(this->servers[tor_index].Get(i));
                 p2pContainer.Add(this->edgeSwitches[pod_num].Get(edge_idx));
                 NetDeviceContainer devices = p2p.Install(p2pContainer);
-                currentEdgeServerDevices.Add(devices);
+                currentEdgeServerDevices.Add(devices.Get(0));
                 this->serverToEdgeLinks[std::make_tuple(tor_index, server_index)] = devices;
             }
 
@@ -310,6 +306,205 @@ void ClosTopology :: assignIpsLan() {
     }
 }
 
+void ClosTopology :: assignServerIps() {
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    Ipv4AddressHelper ipv4;
+
+    /**
+     * IPs are assigned as /16 chunks for each pod.
+     * Each ToR will have a network of /24 IP chunks.
+     * No interface in the fabric will have any IP address.
+    */
+
+    uint32_t tor_index;
+    char buf[17];
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
+            // Get the IP base
+            snprintf(buf, 17, "10.%u.%u.0", (unsigned short) pod_num, (unsigned short) i);
+            tor_index = pod_num * numAggAndEdgeeSwitchesPerPod + i;
+            ipv4.SetBase(Ipv4Address(buf), Ipv4Mask("/24"));
+            this->serverInterfaces[tor_index] = ipv4.Assign(this->serverDevices[tor_index]);
+        }
+    }
+}
+
+void ClosTopology :: createFabricInterfaces() {
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+
+    /**
+     * Assume we have `p` pods, radix of `r` and `n` servers.
+     * Each server has just a single interface of index 1 that points to the ToR serving it.
+     * For other nodes:
+     *  - EDGES: Interfaces 1 .. n go towards the servers and interfaces n+1 ... n+r/2
+     *    go towards the aggregation.
+     *  - AGGREGATIONS: Interfaces 1 .. r/2 go towards the edges and r/2+1 .. r go to the core.
+     *  - CORE: Interfaces 1 .. p go towards the aggregations, interleaved between odd and even
+     *    core indices.
+    */
+
+    // edge-server interfaces
+    Ptr<Ipv4> ipv4;
+    uint32_t switch_idx, if_index;
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+            ipv4 = this->getEdge(pod_num, edge_idx)->GetObject<Ipv4>();
+            for (uint32_t i = 0; i < this->params.numServers; i++) {
+                switch_idx = pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx;
+                if_index = ipv4->AddInterface(this->serverToEdgeLinks[std::make_tuple(
+                    switch_idx,
+                    this->params.numServers * switch_idx + i
+                )].Get(1));
+
+                ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index);
+            }
+        }
+    }
+
+    // agg-edge interfaces
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+            for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+                ipv4 = this->getEdge(pod_num, edge_idx)->GetObject<Ipv4>();
+                if_index = ipv4->AddInterface(
+                    this->edgeToAggLinks[std::make_tuple(
+                        pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx,
+                        pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx
+                    )].Get(0)
+                );
+                ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index);
+
+                ipv4 = this->getAggregate(pod_num, agg_idx)->GetObject<Ipv4>();
+                if_index = ipv4->AddInterface(
+                    this->edgeToAggLinks[std::make_tuple(
+                        pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx,
+                        pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx
+                    )].Get(1)
+                );
+                ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index);
+            }
+        }
+    }
+
+    // agg-core interfaces
+    Ptr<Node> node;
+    Ptr<NetDevice> device;
+    for (auto const& map_elem : this->aggToCoreLinks) {
+        for (uint32_t i = 0; i < 2; i++ ) {
+            device = map_elem.second.Get(i);
+            node = device->GetNode();
+            ipv4 = node->GetObject<Ipv4>();
+            if_index = ipv4->AddInterface(device);
+            ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+            ipv4->SetUp(if_index);
+        }
+    }
+}
+
+void ClosTopology :: setupServerRouting() {
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    Ipv4StaticRoutingHelper staticHelper;
+    
+    uint32_t switch_idx;
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+            switch_idx = numAggAndEdgeeSwitchesPerPod * pod_num + edge_idx;
+            for (uint32_t i = 0; i < this->params.numServers; i++) {
+                staticHelper.GetStaticRouting(this->getHost(switch_idx, i)->GetObject<Ipv4>())->AddNetworkRouteTo(
+                    Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"), 1
+                );
+            }
+        }
+    }
+}
+
+void ClosTopology :: setupCoreRouting() {
+    Ipv4StaticRoutingHelper staticHelper;
+    Ptr<Ipv4StaticRouting> routing;
+    char buf[17];
+
+    for (uint32_t core_idx = 0; core_idx < this->params.switchRadix; core_idx++) {
+        routing = staticHelper.GetStaticRouting(this->getCore(core_idx)->GetObject<Ipv4>());
+
+        for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+            snprintf(buf, 17, "10.%u.0.0", (unsigned char) pod_num);
+            routing->AddNetworkRouteTo(Ipv4Address(buf), Ipv4Mask("/16"), pod_num+1);
+        }
+    }
+}
+
+void ClosTopology :: installWcmpStack() {
+    InternetStackHelper internetHelper;
+    Ipv4ListRoutingHelper listHelper;
+    WcmpStaticRoutingHelper wcmpHelper;
+    Ipv4StaticRoutingHelper staticHelper;
+    
+    listHelper.Add(staticHelper, 0);
+    listHelper.Add(wcmpHelper, WCMP_ROUTING_PRIORITY);
+    internetHelper.SetRoutingHelper(listHelper);
+
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        internetHelper.Install(edgeSwitches[pod_num]);
+        internetHelper.Install(aggSwitches[pod_num]);
+    }
+}
+
+void ClosTopology :: doEcmp() {
+    /**
+     * The main constraint on the routing is that:
+     *  - Traffic between two servers under the same ToR, never leaves that ToR
+     *  - Traffic between two servers in the same pod, never leaves that pod
+     * 
+     * To ensure this, we use WCMP wildecard routes and static routes.
+    */
+
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    WcmpStaticRoutingHelper wcmpHelper;
+    Ipv4StaticRoutingHelper staticHelper;
+    Ptr<Ipv4StaticRouting> staticRouter;
+    Ptr<wcmp::WcmpStaticRouting> wcmpRouter;
+
+    // Edge nodes
+    char buf[17];
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+            // // Route the ToR lan
+            staticRouter = staticHelper.GetStaticRouting(this->getEdge(pod_num, edge_idx)->GetObject<Ipv4>());
+            for (uint32_t i = 0; i < this->params.numServers; i++) {
+                snprintf(buf, 17, "10.%u.%u.%u", (unsigned char) pod_num, (unsigned char) edge_idx, (unsigned char) i+1);
+                staticRouter->AddHostRouteTo(Ipv4Address(buf), i+1);
+            }
+
+            // WCMP wildcards
+            wcmpRouter = wcmpHelper.GetWcmpStaticRouting(this->getEdge(pod_num, edge_idx)->GetObject<Ipv4>());
+            for (uint32_t if_index = this->params.numServers + 1; if_index <= this->params.numServers + numAggAndEdgeeSwitchesPerPod; if_index++) {
+                wcmpRouter->AddWildcardRoute(if_index, 1);
+            }
+        }
+    }
+
+    // Aggregate nodes
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+            // Route the pod lan
+            staticRouter = staticHelper.GetStaticRouting(this->getAggregate(pod_num, agg_idx)->GetObject<Ipv4>());
+            for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
+                snprintf(buf, 17, "10.%u.%u.0", (unsigned char) pod_num, (unsigned char) i);
+                staticRouter->AddNetworkRouteTo(Ipv4Address(buf), Ipv4Mask("/24"), i+1);
+            }
+
+            // WCMP wildcards
+            wcmpRouter = wcmpHelper.GetWcmpStaticRouting(this->getAggregate(pod_num, agg_idx)->GetObject<Ipv4>());
+            for (uint32_t if_index = numAggAndEdgeeSwitchesPerPod + 1; if_index <= this->params.switchRadix; if_index++) {
+                wcmpRouter->AddWildcardRoute(if_index, 1);
+            }
+        }
+    }
+}
+
 void ClosTopology :: setNodeCoordinates() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
@@ -388,44 +583,52 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
 }
 
 void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
-    UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
-    OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), UDP_DISCARD_PORT));
+    static uint32_t port = UDP_DISCARD_PORT;
+
+    PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
+    OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
+    port++;
 
     onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
     onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
     onOffClient.SetAttribute("DataRate", StringValue(rate));
     onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
     
-    this->serverApplications[server_host].Add(echoServer.Install(this->getHost(server_host)));
+    this->serverApplications[server_host].Add(sink.Install(this->getHost(server_host)));
     this->serverApplications[client_host].Add(onOffClient.Install(this->getHost(client_host)));
 }
 
-void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr) {
-    ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
-    link.Get(0)->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
-    link.Get(1)->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
-}
+// void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr) {
+//     NetDeviceContainer link;
+//     if (src_level == EDGE && dst_level == AGGREGATE)  {
+//         link = topology->edgeToAggLinks[std::make_tuple(src_idx, dst_idx)];
+//     }
 
-void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr) {
-    ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
-    link.Get(0)->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
-}
+//     // ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
+//     link.Get(0)->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
+//     link.Get(1)->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
+// }
 
-void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
-    ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
-    ns3::Ptr<ns3::Ipv4> if0 = link.Get(0)->GetNode()->GetObject<ns3::Ipv4>();
-    ns3::Ptr<ns3::Ipv4> if1 = link.Get(1)->GetNode()->GetObject<ns3::Ipv4>();
-    if0->SetDown(link.Get(0)->GetIfIndex());
-    if1->SetDown(link.Get(1)->GetIfIndex());
-}
+// void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr) {
+//     ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
+//     link.Get(0)->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
+// }
 
-void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
-    ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
-    ns3::Ptr<ns3::Ipv4> if0 = link.Get(0)->GetNode()->GetObject<ns3::Ipv4>();
-    ns3::Ptr<ns3::Ipv4> if1 = link.Get(1)->GetNode()->GetObject<ns3::Ipv4>();
-    if0->SetUp(link.Get(0)->GetIfIndex());
-    if1->SetUp(link.Get(1)->GetIfIndex());
-}
+// void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+//     ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
+//     ns3::Ptr<ns3::Ipv4> ipv40 = link.Get(0)->GetNode()->GetObject<ns3::Ipv4>();
+//     ns3::Ptr<ns3::Ipv4> ipv41 = link.Get(1)->GetNode()->GetObject<ns3::Ipv4>();
+//     ipv40->SetDown(link.Get(0)->GetIfIndex());
+//     ipv41->SetDown(link.Get(1)->GetIfIndex());
+// }
+
+// void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+//     ns3::NetDeviceContainer link = topology->getLink(src_level, src_idx, dst_level, dst_idx);
+//     ns3::Ptr<ns3::Ipv4> ipv40 = link.Get(0)->GetNode()->GetObject<ns3::Ipv4>();
+//     ns3::Ptr<ns3::Ipv4> ipv41 = link.Get(1)->GetNode()->GetObject<ns3::Ipv4>();
+//     ipv40->SetUp(link.Get(0)->GetIfIndex());
+//     ipv41->SetUp(link.Get(1)->GetIfIndex());
+// }
 
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args) {
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
@@ -438,12 +641,7 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
 int main(int argc, char *argv[]) {
     Time::SetResolution(Time::US);
 
-    // Naive ECMP
-    // Config::SetDefault("ns3::Ipv4GlobalRouting::RandomEcmpRouting", BooleanValue(true));
-    Config::SetDefault("ns3::Ipv4GlobalRouting::RespondToInterfaceEvents", BooleanValue(true));
-
     topolgoy_descriptor topo_params;
-    // bool verbose = false;
 
     ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
 
@@ -463,26 +661,37 @@ int main(int argc, char *argv[]) {
     nodes.createTopology();
     nodes.createLinks();
 
-    // Assign IP addresses
-    // nodes.assignIps();
-    nodes.assignIpsNaive();
+    // Assign IP addresses and create fabric interfaces
+    nodes.assignServerIps();
+    nodes.createFabricInterfaces();
 
-    // Do God Routing
-    Ipv4GlobalRoutingHelper::PopulateRoutingTables();
-
-    // Echo test ...
-    // ns3::LogComponentEnable("UdpEchoClientApplication", LOG_LEVEL_INFO);
-    // ns3::LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_INFO);
+    // Do ECMP
+    nodes.setupServerRouting();
+    nodes.setupCoreRouting();
+    nodes.doEcmp();
 
     // nodes.echoBetweenHosts(0, 4);
     // nodes.echoBetweenHosts(1, 5);
-    nodes.unidirectionalCbrBetweenHosts(0, 4, "200kbps");
-    nodes.startApplications(1.0, 4.0);
-    schedule(1.1, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
 
-    Ptr<OutputStreamWrapper> routingStream =
-        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getEdge(0), routingStream);
+    uint32_t totalNumberOfServers = nodes.params.numPods * nodes.params.switchRadix * nodes.params.numServers / 2;
+
+    NS_LOG_INFO("[INFO] Total number of servers " << totalNumberOfServers);
+
+    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        for (uint32_t j = 0; j < totalNumberOfServers; j++) {
+            nodes.unidirectionalCbrBetweenHosts(i, j);
+        }
+    }
+    
+    nodes.startApplications(1.0, 4.0);
+
+    // schedule(1.1, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
+
+    // Ptr<OutputStreamWrapper> routingStream =
+    //     Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.2), nodes.getEdge(0), routingStream);
+    // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.2), nodes.getAggregate(0), routingStream);
+    // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.2), nodes.getCore(0), routingStream);
 
     Simulator::Stop(Seconds(5.0));
     Simulator::Run();

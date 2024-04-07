@@ -2,6 +2,8 @@
 #include "ns3/network-module.h"
 #include "ns3/netanim-module.h"
 #include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+
 
 using namespace std;
 
@@ -20,8 +22,8 @@ string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 /**
  * P2P Link Attributes
 */
-const uint32_t DEFAULT_LINK_RATE = 10;          // Gbps
-const uint32_t DEFAULT_LINK_DELAY = 5000;         // us
+const uint32_t DEFAULT_LINK_RATE = 40;          // Gbps
+const uint32_t DEFAULT_LINK_DELAY = 50;         // us
 
 
 /**
@@ -70,6 +72,8 @@ typedef enum topology_level_t {
 #define WIDTH 600.0
 #define NODE_SIZE 8.0
 
+// WCMP routing priority
+#define WCMP_ROUTING_PRIORITY -20
 
 /**
  * The struct that will keep the topology parameters
@@ -116,6 +120,7 @@ typedef struct topology_descriptor_t {
  * Core switches have no tuple addressing, they are just addressed with
  * their index.
 */
+
 class ClosTopology {
     private:
         // The `Even` container connects to aggregate switches with even index,
@@ -130,11 +135,6 @@ class ClosTopology {
         // Map edge switch index to the container of servers under that ToR
         map<uint32_t, ns3::NodeContainer> servers;
 
-        // Map the index of source and destination switches to the associated NetDevice pair
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> edgeToAggLinks;
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> aggToCoreLinks;
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> serverToEdgeLinks;
-
         // These hold the NIC and IPv4 interfaces of the servers, given the ToR index
         map<uint32_t, ns3::NetDeviceContainer> serverDevices;
         map<uint32_t, ns3::Ipv4InterfaceContainer> serverInterfaces;
@@ -145,18 +145,33 @@ class ClosTopology {
         ns3::AnimationInterface *anim = NULL;
 
         void createServers();
-        void connectServers();
+        void connectServers(ns3::PointToPointHelper p2p);
 
         // For NetAnim
         void setNodeCoordinates();
 
     public:
+        // TODO: These should be private, to it later
+        // Map the index of source and destination switches to the associated NetDevice pair
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> edgeToAggLinks;
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> aggToCoreLinks;
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> serverToEdgeLinks;
+
         topology_descriptor_t params;
         ClosTopology(const topology_descriptor_t m_params);
         void createTopology();
         void createLinks();
+        
         void assignIpsLan();
         void assignIpsNaive();
+        void assignServerIps();
+        void createFabricInterfaces();
+
+        void setupServerRouting();
+        void setupCoreRouting();
+        void installWcmpStack();        // MUST be called before creating interfaces
+        void doEcmp();
+
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
 
@@ -173,29 +188,6 @@ class ClosTopology {
 
         ns3::Ipv4Address getServerAddress(uint32_t edge_idx, uint32_t server_idx) {
             return this->serverInterfaces[edge_idx].GetAddress(server_idx);
-        }
-
-        ns3::NetDeviceContainer getLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
-            if (src_level < dst_level) {
-                if (src_level == EDGE) {
-                    NS_ASSERT(dst_level == AGGREGATE);
-                    return this->edgeToAggLinks[make_tuple(src_idx, dst_idx)];
-                }
-                else {
-                    NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
-                    return this->aggToCoreLinks[make_tuple(src_idx, dst_idx)];
-                }
-            }
-            else {
-                if (dst_level == EDGE) {
-                    NS_ASSERT(src_level == AGGREGATE);
-                    return this->edgeToAggLinks[make_tuple(dst_idx, src_idx)];
-                }
-                else {
-                    NS_ASSERT(dst_level == AGGREGATE && src_level == CORE);
-                    return this->aggToCoreLinks[make_tuple(dst_idx, src_idx)];
-                }
-            }
         }
 
         ns3::Ptr<ns3::Node> getCore(uint32_t idx) {

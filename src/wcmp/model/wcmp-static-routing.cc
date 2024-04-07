@@ -356,6 +356,7 @@ WcmpStaticRouting :: NotifyInterfaceDown(uint32_t i) {
      * If we were adding routes to this IP though, we should remove that.
     */
 
+    NS_LOG_INFO("Interface " << i << " is down, updating weights");
     this->weights.set_state(i, false);
     if (this->m_add_route_on_up) {
         // TODO: Remove the route

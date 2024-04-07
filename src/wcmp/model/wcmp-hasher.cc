@@ -6,6 +6,9 @@
 
 namespace ns3
 {
+
+NS_LOG_COMPONENT_DEFINE("WcmpHasher");
+
 namespace wcmp
 {
 
@@ -25,7 +28,10 @@ WcmpHasher :: getHashIpv4(Ptr<const Packet> p, const Ipv4Header& header) {
 
 uint32_t
 WcmpHasher :: getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header) {
-    NS_ASSERT(header.GetProtocol() == TCP_PROTOCOL);
+    if (!(header.GetProtocol() == TCP_PROTOCOL)) {
+        return getHashIpv4(p, header);
+    }
+
     uint8_t buf[12];
     
     TcpHeader tcpHeader;
@@ -44,7 +50,10 @@ WcmpHasher :: getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header) {
 
 uint32_t
 WcmpHasher :: getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header) {
-    NS_ASSERT(header.GetProtocol() == UDP_PROTOCOL || header.GetProtocol() == TCP_PROTOCOL);
+    if (!(header.GetProtocol() == UDP_PROTOCOL || header.GetProtocol() == TCP_PROTOCOL)) {
+        return getHashIpv4(p, header);
+    }
+
     uint8_t buf[12];
     
     if (header.GetProtocol() == UDP_PROTOCOL) {
