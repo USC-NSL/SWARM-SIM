@@ -1,8 +1,8 @@
 .PHONY: copy check clean purge configure test
 
-# To speedup builds, we only enable what we need
-INCLUDE_MODULES = "wcmp;internet;netanim;flow-monitor"
-INCLUDE_MODULES_MPI = "wcmp;internet;netanim;flow-monitor;mpi"
+# To speedup builds, we only enable what we need (Using MPI means no NetAnim)
+INCLUDE_MODULES = "point-to-point;applications;wcmp;internet;netanim;flow-monitor"
+INCLUDE_MODULES_MPI = "point-to-point;applications;wcmp;internet;flow-monitor;mpi"
 
 TEST_MODULES = "wcmp"
 
@@ -25,12 +25,13 @@ copy: check
 configure: copy
 	ns3/ns3 configure --enable-tests --enable-modules $(INCLUDE_MODULES) --filter-module-examples-and-tests $(TEST_MODULES)
 
+# Note: Using MPI disables log messages, since it uses the optmized NS-3 build
 configure-mpi:
-	ns3/ns3 configure --enable-modules $(INCLUDE_MODULES_MPI) -d optimized --enable-mpi --enable-examples
+	ns3/ns3 configure --enable-mpi --enable-examples --enable-modules $(INCLUDE_MODULES_MPI) -d optimized --filter-module-examples-and-tests mpi
 
 build: copy
 	@echo "Building swarm simulation"
-	ns3/ns3 build
+	ns3/ns3
 
 clean:
 	@rm -f *.o

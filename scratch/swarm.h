@@ -1,12 +1,26 @@
+// Use MPI
+#define MPI_ENABLED 1
+
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
-#include "ns3/netanim-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
+#if !MPI_ENABLED
+#include "ns3/netanim-module.h"
+#else
+#include "ns3/mpi-module.h"
+#endif
 
 using namespace std;
 
+#if MPI_ENABLED
+#define NUM_LP 8
+#endif
+
+// If MPI fails to work ...
+uint32_t systemId = 0;
+uint32_t systemCount = 1;
 
 /**
  * Component name
@@ -75,9 +89,6 @@ typedef enum topology_level_t {
 // WCMP routing priority
 #define WCMP_ROUTING_PRIORITY -20
 
-// Use MPI
-#define ENABLE_MPI 0
-
 // Direct and Backup path metric
 #define DIRECT_PATH_METRIC 1
 #define BACKUP_PATH_METRIC 10
@@ -145,6 +156,11 @@ class ClosTopology {
         // Map edge switch index to the container of servers under that ToR
         map<uint32_t, ns3::NodeContainer> servers;
 
+        // Map the index of source and destination switches to the associated NetDevice pair
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> edgeToAggLinks;
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> aggToCoreLinks;
+        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> serverToEdgeLinks;
+
         // These hold the NIC and IPv4 interfaces of the servers, given the ToR index
         map<uint32_t, ns3::NetDeviceContainer> serverDevices;
         map<uint32_t, ns3::Ipv4InterfaceContainer> serverInterfaces;
@@ -152,29 +168,28 @@ class ClosTopology {
         // Application containers for each server
         vector<ns3::ApplicationContainer> serverApplications;
         
+        #if !MPI_ENABLED
+        // For NetAnim
         ns3::AnimationInterface *anim = NULL;
+        void setNodeCoordinates();
+        #endif
 
         void createServers();
         void connectServers(ns3::PointToPointHelper p2p);
-
-        // For NetAnim
-        void setNodeCoordinates();
 
         tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> getLinkInterfaceIndices(
             topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx
         );
 
     public:
-        // TODO: These should be private, to it later
-        // Map the index of source and destination switches to the associated NetDevice pair
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> edgeToAggLinks;
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> aggToCoreLinks;
-        map<tuple<uint32_t, uint32_t>, ns3::NetDeviceContainer> serverToEdgeLinks;
-
         topology_descriptor_t params;
         ClosTopology(const topology_descriptor_t m_params);
         void createTopology();
         void createLinks();
+
+        #if MPI_ENABLED
+        void createCoreMPI();
+        #endif
         
         void assignIpsLan();
         void assignIpsNaive();
@@ -259,6 +274,12 @@ class ClosTopology {
                 container.Start(ns3::Seconds(t_start));
                 container.Stop(ns3::Seconds(t_finish));
             }
+        }
+
+        uint32_t getSystemIdOfServer(uint32_t host_idx) {
+            uint32_t edge_idx = host_idx / this->params.numServers;
+
+            return getPodAndIndex(edge_idx).first % systemCount;
         }
 };
 
