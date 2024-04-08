@@ -78,6 +78,10 @@ typedef enum topology_level_t {
 // Use MPI
 #define ENABLE_MPI 0
 
+// Direct and Backup path metric
+#define DIRECT_PATH_METRIC 1
+#define BACKUP_PATH_METRIC 10
+
 // Drop tail queue maximum length
 const uint32_t MAX_PACKET_PER_QUEUE = 10;
 
@@ -156,6 +160,10 @@ class ClosTopology {
         // For NetAnim
         void setNodeCoordinates();
 
+        tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> getLinkInterfaceIndices(
+            topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx
+        );
+
     public:
         // TODO: These should be private, to it later
         // Map the index of source and destination switches to the associated NetDevice pair
@@ -177,9 +185,16 @@ class ClosTopology {
         void setupCoreRouting();
         void installWcmpStack();        // MUST be called before creating interfaces
         void doEcmp();
+        void enableAggregateBackupPaths();
+
+        void doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+        void doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+        void doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
+        void doChangeDelay(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
 
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
+        void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];
@@ -197,10 +212,10 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getCore(uint32_t idx) {
-            if (idx < this->params.switchRadix / 2) {
+            if (idx < (this->params.switchRadix / 2)) {
                 return this->coreSwitchesEven.Get(idx);
             }
-            return this->coreSwitchesOdd.Get(idx - this->params.switchRadix / 2);
+            return this->coreSwitchesOdd.Get(idx - (this->params.switchRadix / 2));
         }
 
         ns3::Ptr<ns3::Node> getAggregate(uint32_t pod_num, uint32_t idx) {
@@ -208,8 +223,8 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getAggregate(uint32_t  full_idx) {
-            uint32_t idx = full_idx % this->params.switchRadix / 2;
-            uint32_t pod_num = full_idx / this->params.switchRadix / 2;
+            uint32_t idx = full_idx % (this->params.switchRadix / 2);
+            uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
             return this->getAggregate(pod_num, idx);
         }
 
@@ -218,8 +233,8 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getEdge(uint32_t  full_idx) {
-            uint32_t idx = full_idx % this->params.switchRadix / 2;
-            uint32_t pod_num = full_idx / this->params.switchRadix / 2;
+            uint32_t idx = full_idx % (this->params.switchRadix / 2);
+            uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
             return this->getEdge(pod_num, idx);
         }
 
@@ -231,6 +246,12 @@ class ClosTopology {
             uint32_t idx = host_idx % this->params.numServers;
             uint32_t edge_idx = host_idx / this->params.numServers;
             return this->getHost(edge_idx, idx);
+        }
+
+        pair<uint32_t, uint32_t> getPodAndIndex(uint32_t full_idx) {
+            uint32_t idx = full_idx % (this->params.switchRadix / 2);
+            uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
+            return make_pair(pod_num, idx);
         }
 
         void startApplications(double t_start, double t_finish) {

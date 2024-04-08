@@ -182,6 +182,50 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
 }
 
 Ptr<Ipv4Route>
+WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t iif)
+{   
+    // Get equal cost LPM paths
+    std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
+
+    if (!entries.size()) {
+        // No routes exist
+        NS_LOG_LOGIC("LPM returned empty for " << dest);
+        return nullptr;
+    }
+
+    // Remove any route that is attached to the same input interface
+    entries.erase(std::remove_if(entries.begin(), entries.end(), 
+        [iif](Ipv4RoutingTableEntry* entry) {return entry->GetInterface() == iif;}
+    ), entries.end());
+
+    if (!entries.size()) {
+        // No routes exist
+        NS_LOG_LOGIC("We have a loop! " << dest);
+        return nullptr;
+    }
+
+    // Choose a routing table entry
+    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val);
+
+    if (!chosen) {
+        // All interfaces are down
+        NS_LOG_LOGIC("All interfaces are down");
+        return nullptr;
+    }
+
+    // Output the routing entry
+    Ptr<Ipv4Route> rtentry = Create<Ipv4Route>();
+    rtentry->SetDestination(chosen->GetDest());
+    rtentry->SetSource(m_ipv4->SourceAddressSelection(chosen->GetInterface(), chosen->GetDest()));
+    rtentry->SetGateway(chosen->GetGateway());
+    rtentry->SetOutputDevice(m_ipv4->GetNetDevice(chosen->GetInterface()));
+
+    NS_LOG_LOGIC("WCMP lookup chose " << chosen->GetInterface());
+
+    return rtentry;
+}
+
+Ptr<Ipv4Route>
 WcmpStaticRouting :: RouteOutput(Ptr<Packet> p,
                                const Ipv4Header& header,
                                Ptr<NetDevice> oif,
@@ -272,7 +316,7 @@ WcmpStaticRouting :: RouteInput(Ptr<const Packet> p,
     NS_LOG_LOGIC("WCMP hash for packet = " << hash_val);
 
     // Next, try to find a route
-    Ptr<Ipv4Route> rtentry = LookupWcmp(ipHeader.GetDestination(), hash_val);
+    Ptr<Ipv4Route> rtentry = LookupWcmp(ipHeader.GetDestination(), hash_val, iif);
 
     if (rtentry)
     {
@@ -462,6 +506,8 @@ WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Un
             *os << std::setw(16) << dest.str();
             *os << std::setw(7) << GetMetric(j);
             
+            NS_LOG_LOGIC("Printing entry with destination " << entry.GetDest() << " and interface " << entry.GetInterface());
+
             if (!Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface())).empty())
             {
                 *os << std::setw(9) << Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface()));

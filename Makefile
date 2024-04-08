@@ -39,5 +39,5 @@ clean:
 	@rm -f ns3/*.routes
 
 purge: check clean
-	ns3/ns3 clean
+	ns3/ns3 distclean
 

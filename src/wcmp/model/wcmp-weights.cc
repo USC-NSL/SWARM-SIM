@@ -89,10 +89,13 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
     std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>> up_entries;
     for (auto const & it: equal_cost_entries) {
         if_index = it->GetInterface();
+        NS_LOG_LOGIC("Considerng " << if_index);
         // Is the interface up?
         if (this->weights.at(if_index).second) {
+            NS_LOG_LOGIC("Considerng up interface " << if_index);
             sum += this->weights.at(if_index).first;
             up_entries.push_back(std::make_pair(it, sum));
+            NS_LOG_LOGIC("Current sum " << sum);
         }
         else {
             NS_LOG_LOGIC("Ignoring interface " << if_index);

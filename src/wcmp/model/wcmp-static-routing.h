@@ -69,6 +69,7 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
          * The main lookup function that implements WCMP
         */
         Ptr<Ipv4Route> LookupWcmp(Ipv4Address dest, uint32_t hash_val);
+        Ptr<Ipv4Route> LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t iif);
 
         Ptr<Ipv4Route> RouteOutput(Ptr<Packet> p,
             const Ipv4Header& header,
