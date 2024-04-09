@@ -185,7 +185,8 @@ void ClosTopology :: createLinks() {
 }
 
 void ClosTopology :: createServers() {
-    // There will be `numServers * 2.switchRadix` servers in total
+    // There will be `numServers * switchRadix/2 * numPods` servers in total, so switchRadix^3/4
+    //      servers at most.
     // We key them with (pod_num, edge_switch_index) --> NodeContainer
     
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
@@ -194,9 +195,16 @@ void ClosTopology :: createServers() {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
             NodeContainer edgeServers(this->params.numServers, (pod_num % systemCount));
             this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
-            for (uint32_t i = 0; i < this->params.numServers; i++) {
-                this->serverApplications.push_back(ApplicationContainer());
-            }
+
+            // #if MPI_ENABLED
+            // if (MpiInterface::GetSystemId() == (pod_num % systemCount)) {
+            // #endif
+                for (uint32_t i = 0; i < this->params.numServers; i++) {
+                    this->serverApplications.push_back(ApplicationContainer());
+                }
+            // #if MPI_ENABLED
+            // }
+            // #endif
         }
     }
 }
@@ -446,7 +454,10 @@ void ClosTopology :: setupServerRouting() {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
             switch_idx = numAggAndEdgeeSwitchesPerPod * pod_num + edge_idx;
             for (uint32_t i = 0; i < this->params.numServers; i++) {
-                staticHelper.GetStaticRouting(this->getHost(switch_idx, i)->GetObject<Ipv4>())->AddNetworkRouteTo(
+                Ptr<Node> ptr = this->getHost(switch_idx, i);
+                if (!ptr)
+                    continue;
+                staticHelper.GetStaticRouting(ptr->GetObject<Ipv4>())->AddNetworkRouteTo(
                     Ipv4Address("0.0.0.0"), Ipv4Mask("0.0.0.0"), 1
                 );
             }
@@ -658,15 +669,39 @@ void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_
 
 void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
     static uint32_t port = UDP_DISCARD_PORT;
-    
+    Ptr<Node> ptr;
+
+    if ((ptr = this->getHost(server_host))) {
+        UdpEchoServerHelper echoServer(port);
+        this->serverApplications[server_host].Add(echoServer.Install(ptr));
+    }
+
+    if ((ptr = this->getHost(server_host))) {
+        OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));    
+        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
+
+        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        onOffClient.SetAttribute("DataRate", StringValue(rate));
+        onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
+    }
+    /*
     if (MpiInterface::GetSystemId() == this->getSystemIdOfServer(server_host)) {
-        std::cout << "Server system ID = " << this->getHost(server_host)->GetSystemId() << ", and we got " << this->getSystemIdOfServer(server_host) << "\n";
+        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Server system ID = " << this->getHost(server_host)->GetSystemId() << \
+            ", and we got " << this->getSystemIdOfServer(server_host) << "\n";
+        
         UdpEchoServerHelper echoServer(port);
         this->serverApplications[server_host].Add(echoServer.Install(this->getHost(server_host)));
     }
+    else {
+        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Skipped installing server on " << server_host << " since it SysID was " << \
+            this->getSystemIdOfServer(server_host) << "\n";
+    }
 
     if (MpiInterface::GetSystemId() == this->getSystemIdOfServer(client_host)) {
-        std::cout << "Client system ID = " << this->getHost(client_host)->GetSystemId() << ", and we got " << this->getSystemIdOfServer(client_host) << "\n";
+        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Client system ID = " << this->getHost(client_host)->GetSystemId() << \
+            ", and we got " << this->getSystemIdOfServer(client_host) << "\n";
+        
         OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));    
         this->serverApplications[client_host].Add(onOffClient.Install(this->getHost(client_host)));
 
@@ -675,6 +710,10 @@ void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t
         onOffClient.SetAttribute("DataRate", StringValue(rate));
         onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
     }
+    else {
+        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Skipped installing client on " << client_host << " since it SysID was " << \
+            this->getSystemIdOfServer(client_host) << "\n";
+    }*/
 
     port++;
 }
@@ -798,8 +837,8 @@ int main(int argc, char *argv[]) {
     // Config::SetDefault("ns3::DropTailQueue::MaxPackets", IntegerValue(MAX_PACKET_PER_QUEUE));
 
     #if MPI_ENABLED
-    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
-    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
+    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
     MpiInterface::Enable(&argc, &argv);
 
     systemId = MpiInterface::GetSystemId();
@@ -862,19 +901,41 @@ int main(int argc, char *argv[]) {
     }
     #endif
 
-    // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-    //     for (uint32_t j = 0; j < totalNumberOfServers; j++) {
-    //         if (i == j)
-    //             continue;
-    //         nodes.bidirectionalCbrBetweenHosts(i, j);
-    //     }
-    // }
+    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        for (uint32_t j = 0; j < totalNumberOfServers; j++) {
+            if (i == j)
+                continue;
+            nodes.bidirectionalCbrBetweenHosts(i, j);
+        }
+    }
 
     // nodes.bidirectionalCbrBetweenHosts(0, 1);
+    // nodes.bidirectionalCbrBetweenHosts(0, 2);
+    // nodes.bidirectionalCbrBetweenHosts(0, 3);
+    // nodes.bidirectionalCbrBetweenHosts(0, 4);
+    // nodes.bidirectionalCbrBetweenHosts(0, 5);
+    // nodes.bidirectionalCbrBetweenHosts(0, 6);
+    // nodes.bidirectionalCbrBetweenHosts(0, 7);
+
+    // nodes.bidirectionalCbrBetweenHosts(1, 0);
+    // nodes.bidirectionalCbrBetweenHosts(1, 2);
+    // nodes.bidirectionalCbrBetweenHosts(1, 3);
+    // nodes.bidirectionalCbrBetweenHosts(1, 4);
+    // nodes.bidirectionalCbrBetweenHosts(1, 5);
+    // nodes.bidirectionalCbrBetweenHosts(1, 6);
+    // nodes.bidirectionalCbrBetweenHosts(1, 7);
+
+    // nodes.bidirectionalCbrBetweenHosts(4, 0);
+    // nodes.bidirectionalCbrBetweenHosts(4, 1);
+    // nodes.bidirectionalCbrBetweenHosts(4, 2);
+    // nodes.bidirectionalCbrBetweenHosts(4, 3);
+    // nodes.bidirectionalCbrBetweenHosts(4, 5);
+    // nodes.bidirectionalCbrBetweenHosts(4, 6);
+    // nodes.bidirectionalCbrBetweenHosts(4, 7);
     // nodes.bidirectionalCbrBetweenHosts(0, 2, "5Gbps");
 
-    nodes.unidirectionalCbrBetweenHosts(0, 1);
-    nodes.unidirectionalCbrBetweenHosts(4, 5);
+    // nodes.unidirectionalCbrBetweenHosts(0, 1);
+    // nodes.unidirectionalCbrBetweenHosts(4, 5);
     // nodes.echoBetweenHosts(0, 4);
     // nodes.bidirectionalCbrBetweenHosts(0, 4, "1Mbps");
     
@@ -890,7 +951,7 @@ int main(int argc, char *argv[]) {
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getAggregate(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
 
-    ShowProgress s = ShowProgress(Seconds(1), std::cerr);
+    // ShowProgress s = ShowProgress(Seconds(1), std::cerr);
     
     Simulator::Stop(Seconds(5.0));
     Simulator::Run();

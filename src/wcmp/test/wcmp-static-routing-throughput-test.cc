@@ -203,7 +203,7 @@ WcmpStaticRoutingThroughputTest :: setupAnimation(std::vector<Ptr<Node>> nodes) 
  * A will use a UDP socket to send these packets. We will test WCMP
  * compliance with TCP later.
  * 
- * - During [0.0, 2.0), R will do ECMP between its 3 outgoing links
+ * - During [1.0, 2.0), R will do ECMP between its 3 outgoing links
  * - During [2.0, 3.0), we will adjust the weights and distribute the packets 1:2:3
  * - During [3.0, 4.0), we will bring down the interface from R to L2, we expect no packet loss
  *   with NS-3, since it adjusts the routing table instantly.

@@ -258,6 +258,11 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getHost(uint32_t host_idx) {
+            #if MPI_ENABLED
+            if (ns3::MpiInterface::GetSystemId() != getSystemIdOfServer(host_idx))
+                return nullptr;
+            #endif
+
             uint32_t idx = host_idx % this->params.numServers;
             uint32_t edge_idx = host_idx / this->params.numServers;
             return this->getHost(edge_idx, idx);
