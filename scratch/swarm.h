@@ -6,11 +6,12 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
-#if !MPI_ENABLED
+// #if !MPI_ENABLED
 #include "ns3/netanim-module.h"
-#else
+// #else
 #include "ns3/mpi-module.h"
-#endif
+// #include "ns3/mpi-test-fixtures.h"
+// #endif
 
 using namespace std;
 
@@ -93,6 +94,51 @@ typedef enum topology_level_t {
 #define DIRECT_PATH_METRIC 1
 #define BACKUP_PATH_METRIC 10
 
+/**
+ * Misc. definitions
+*/
+#define UDP_DISCARD_PORT 9
+#define UDP_PACKET_SIZE_BIG 1024
+#define UDP_PACKET_SIZE_SMALL 64
+
+/**
+ * Logging definitions
+*/
+#ifndef SWARM_LOG_CONDITION
+#define SWARM_LOG_CONDITION if (MpiInterface::GetSystemId() == 0)
+#endif
+
+#define SWARM_INFO_ALL(msg)                                 \
+    SWARM_LOG_CONDITION                                     \
+    do {                                                    \
+        NS_LOG_INFO("[INFO][" << systemId << "] " << msg);  \
+    } while (false)                                         \
+
+#define SWARM_DEBG(msg)                                     \
+    SWARM_LOG_CONDITION                                     \
+    do {                                                    \
+        if (systemId == 0) {                                \
+            NS_LOG_DEBUG("[DEBG] " << msg);                 \
+        }                                                   \
+    } while (false)                                         \
+
+#define SWARM_INFO(msg)                                     \
+    SWARM_LOG_CONDITION                                     \
+    do {                                                    \
+        if (systemId == 0) {                                \
+            NS_LOG_INFO("[INFO] " << msg);                  \
+        }                                                   \
+    } while (false)                                         \
+
+#define SWARM_WARN(msg)                                     \
+    SWARM_LOG_CONDITION                                     \
+    do {                                                    \
+        if (systemId == 0) {                                \
+            NS_LOG_WARN("[WARN] " << msg);                  \
+        }                                                   \
+    } while (false)                                         \
+
+
 // Drop tail queue maximum length
 const uint32_t MAX_PACKET_PER_QUEUE = 10;
 
@@ -167,15 +213,18 @@ class ClosTopology {
 
         // Application containers for each server
         vector<ns3::ApplicationContainer> serverApplications;
-        
-        #if !MPI_ENABLED
+
+        // Used to get a free port for a host
+        unordered_map<uint32_t, uint16_t> portMap;
+ 
+        // #if !MPI_ENABLED
         // For NetAnim
         ns3::AnimationInterface *anim = NULL;
         void setNodeCoordinates();
-        #endif
+        // #endif
 
         void createServers();
-        void connectServers(ns3::PointToPointHelper p2p);
+        void connectServers();
 
         tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> getLinkInterfaceIndices(
             topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx
@@ -254,12 +303,17 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getHost(uint32_t edge_idx, uint32_t host_idx) {
+            #if MPI_ENABLED
+            if (systemId != getSystemIdOfServer(host_idx))
+                return nullptr;
+            #endif
+
             return this->servers[edge_idx].Get(host_idx);
         }
 
         ns3::Ptr<ns3::Node> getHost(uint32_t host_idx) {
             #if MPI_ENABLED
-            if (ns3::MpiInterface::GetSystemId() != getSystemIdOfServer(host_idx))
+            if (systemId != getSystemIdOfServer(host_idx))
                 return nullptr;
             #endif
 
@@ -286,14 +340,25 @@ class ClosTopology {
 
             return getPodAndIndex(edge_idx).first % systemCount;
         }
-};
 
-/**
- * Misc. definitions
-*/
-#define UDP_DISCARD_PORT 9
-#define UDP_PACKET_SIZE_BIG 1024
-#define UDP_PACKET_SIZE_SMALL 64
+        uint16_t getNextPort(uint32_t host_idx) {
+            return this->portMap[host_idx]++;
+        }
+
+        uint16_t getNextPort(uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
+            uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
+            return this->portMap[host_idx]++;
+        }
+
+        void addHostToPortMap(uint32_t host_idx) {
+            this->portMap[host_idx] = UDP_DISCARD_PORT;
+        }
+
+        void addHostToPortMap(uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
+            uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
+            addHostToPortMap(host_idx);
+        }
+};
 
 /**
  * Function pointer typedefs

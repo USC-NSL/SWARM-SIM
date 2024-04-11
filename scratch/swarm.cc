@@ -3,46 +3,46 @@
 #include "ns3/applications-module.h"
 #include "ns3/wcmp-static-routing-helper.h"
 
-#if !MPI_ENABLED
+// #if !MPI_ENABLED
 #include "ns3/mobility-helper.h"
-#endif
+// #endif
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE(COMPONENT_NAME);
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
-    NS_LOG_INFO("[INFO] Building FatTree with the following params:");
+    SWARM_INFO("Building FatTree with the following params:");
 
     char buf[128];
     int n;
 
     n = snprintf(buf, 128, "\tLink Rate = %d Gbps", topo_params->linkRate);
     buf[n] = '\0';
-    NS_LOG_INFO(buf);
+    SWARM_INFO(buf);
     
     n = snprintf(buf, 128, "\tLink Delay = %d us", topo_params->linkDelay);
     buf[n] = '\0';
-    NS_LOG_INFO(buf);
+    SWARM_INFO(buf);
     
     n = snprintf(buf, 128, "\tSwitch Radix = %d", topo_params->switchRadix);
     buf[n] = '\0';
-    NS_LOG_INFO(buf);
+    SWARM_INFO(buf);
     
     n = snprintf(buf, 128, "\tNumber of Servers Per Edge = %d", topo_params->numServers);
     buf[n] = '\0';
-    NS_LOG_INFO(buf);
+    SWARM_INFO(buf);
     
     n = snprintf(buf, 128, "\tNumber of Pods = %d", topo_params->numPods);
     buf[n] = '\0';
-    NS_LOG_INFO(buf);
+    SWARM_INFO(buf);
 
     if (topo_params->animate) {
-        NS_LOG_INFO("[INFO] Will output NetAnim XML file to " + ANIM_FILE_OUTPUT);
+        SWARM_INFO("Will output NetAnim XML file to " + ANIM_FILE_OUTPUT);
     }
 
     if (topo_params->switchRadix / 2 < topo_params->numServers) {
-        NS_LOG_WARN("[WARN] Number of servers exceeds half the radix. This topology is oversubscribed!");
+        SWARM_WARN("Number of servers exceeds half the radix. This topology is oversubscribed!");
     }
 
     NS_ASSERT(topo_params->switchRadix >= topo_params->numPods);
@@ -172,15 +172,15 @@ void ClosTopology :: createLinks() {
     }
 
     // Edge to Server links
-    this->connectServers(p2p);
+    this->connectServers();
 
     // p2p.EnablePcapAll("swarm-pcap");
 
     // Animate?
     if (this->params.animate) {
-        #if !MPI_ENABLED
+        // #if !MPI_ENABLED
         this->setNodeCoordinates();
-        #endif
+        // #endif
     }
 }
 
@@ -193,24 +193,22 @@ void ClosTopology :: createServers() {
 
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+            SWARM_DEBG("Creating servers for edge index " << edge_idx << " in pod "
+                << pod_num << " with system ID " << pod_num % systemCount);
             NodeContainer edgeServers(this->params.numServers, (pod_num % systemCount));
             this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
 
-            // #if MPI_ENABLED
-            // if (MpiInterface::GetSystemId() == (pod_num % systemCount)) {
-            // #endif
-                for (uint32_t i = 0; i < this->params.numServers; i++) {
-                    this->serverApplications.push_back(ApplicationContainer());
-                }
-            // #if MPI_ENABLED
-            // }
-            // #endif
+            for (uint32_t i = 0; i < this->params.numServers; i++) {
+                this->serverApplications.push_back(ApplicationContainer());
+                this->addHostToPortMap(pod_num, edge_idx, i);
+            }
         }
     }
 }
 
-void ClosTopology :: connectServers(PointToPointHelper p2p) {
+void ClosTopology :: connectServers() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    PointToPointHelper p2p;
 
     uint32_t tor_index, server_index;
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
@@ -572,7 +570,7 @@ void ClosTopology :: enableAggregateBackupPaths() {
     }
 }
 
-#if !MPI_ENABLED
+// #if !MPI_ENABLED
 void ClosTopology :: setNodeCoordinates() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
@@ -637,7 +635,7 @@ void ClosTopology :: setNodeCoordinates() {
         }
     }
 }
-#endif
+// #endif
 
 void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval) {
     UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
@@ -652,31 +650,39 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
 }
 
 void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
-    static uint32_t port = UDP_DISCARD_PORT;
-
-    PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
-    OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
-    port++;
-
-    onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-    onOffClient.SetAttribute("DataRate", StringValue(rate));
-    onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
+    uint32_t port = this->getNextPort(server_host);
+    Ptr<Node> ptr;
     
-    this->serverApplications[server_host].Add(sink.Install(this->getHost(server_host)));
-    this->serverApplications[client_host].Add(onOffClient.Install(this->getHost(client_host)));
+    // NS_LOG_INFO("Called with port = " << port << " for server host " << server_host);
+    if ((ptr = this->getHost(server_host))) {
+        PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
+        this->serverApplications[server_host].Add(sink.Install(this->getHost(server_host)));
+        SWARM_DEBG("Installed sink on " << server_host);
+    }
+
+    if ((ptr = this->getHost(client_host))) {
+        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
+        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
+
+        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        onOffClient.SetAttribute("DataRate", StringValue(rate));
+        onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
+        SWARM_DEBG("Installed client on " << client_host);
+    }
 }
 
 void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
-    static uint32_t port = UDP_DISCARD_PORT;
+    uint32_t port = this->getNextPort(server_host);
     Ptr<Node> ptr;
 
     if ((ptr = this->getHost(server_host))) {
         UdpEchoServerHelper echoServer(port);
         this->serverApplications[server_host].Add(echoServer.Install(ptr));
+        SWARM_DEBG("Installed server on " << server_host);
     }
 
-    if ((ptr = this->getHost(server_host))) {
+    if ((ptr = this->getHost(client_host))) {
         OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));    
         this->serverApplications[client_host].Add(onOffClient.Install(ptr));
 
@@ -684,38 +690,8 @@ void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(rate));
         onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
+        SWARM_DEBG("Installed client on " << client_host);
     }
-    /*
-    if (MpiInterface::GetSystemId() == this->getSystemIdOfServer(server_host)) {
-        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Server system ID = " << this->getHost(server_host)->GetSystemId() << \
-            ", and we got " << this->getSystemIdOfServer(server_host) << "\n";
-        
-        UdpEchoServerHelper echoServer(port);
-        this->serverApplications[server_host].Add(echoServer.Install(this->getHost(server_host)));
-    }
-    else {
-        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Skipped installing server on " << server_host << " since it SysID was " << \
-            this->getSystemIdOfServer(server_host) << "\n";
-    }
-
-    if (MpiInterface::GetSystemId() == this->getSystemIdOfServer(client_host)) {
-        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Client system ID = " << this->getHost(client_host)->GetSystemId() << \
-            ", and we got " << this->getSystemIdOfServer(client_host) << "\n";
-        
-        OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));    
-        this->serverApplications[client_host].Add(onOffClient.Install(this->getHost(client_host)));
-
-        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-        onOffClient.SetAttribute("DataRate", StringValue(rate));
-        onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
-    }
-    else {
-        std::cout << "[SysId = " << MpiInterface::GetSystemId() << "] " << "Skipped installing client on " << client_host << " since it SysID was " << \
-            this->getSystemIdOfServer(client_host) << "\n";
-    }*/
-
-    port++;
 }
 
 std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTopology :: getLinkInterfaceIndices(topology_level src_level, 
@@ -764,7 +740,7 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
         src_level, src_idx, dst_level, dst_idx
     );
 
-    NS_LOG_DEBUG("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
@@ -776,7 +752,7 @@ void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, to
         src_level, src_idx, dst_level, dst_idx
     );
 
-    NS_LOG_DEBUG("Enabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG("Enabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->SetUp(std::get<1>(props));
@@ -788,7 +764,7 @@ void ClosTopology :: doChangeBandwidth(topology_level src_level, uint32_t src_id
         src_level, src_idx, dst_level, dst_idx
     );
 
-    NS_LOG_DEBUG("Changing bandwidth on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG("Changing bandwidth on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
@@ -800,7 +776,7 @@ void ClosTopology :: doChangeDelay(topology_level src_level, uint32_t src_idx, t
         src_level, src_idx, dst_level, dst_idx
     );
 
-    NS_LOG_DEBUG("Changing delay on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG("Changing delay on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
@@ -834,41 +810,32 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
 int main(int argc, char *argv[]) {
     Time::SetResolution(Time::US);
 
-    // Config::SetDefault("ns3::DropTailQueue::MaxPackets", IntegerValue(MAX_PACKET_PER_QUEUE));
+    topolgoy_descriptor topo_params;
+
+    ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
+    // ns3::LogComponentEnable("PacketSink", LOG_LEVEL_ALL);
+
+    CommandLine cmd(__FILE__);
+    cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
+    cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params.linkDelay);
+    cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
+    cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
+    cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
+    cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
+    cmd.Parse(argc, argv);
+
+    logDescriptors(&topo_params);
 
     #if MPI_ENABLED
-    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
-    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
+    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
     MpiInterface::Enable(&argc, &argv);
+    // SinkTracer::Init();
 
     systemId = MpiInterface::GetSystemId();
     systemCount = MpiInterface::GetSize();
 
-    if (MpiInterface::GetSystemId() == 0)
-        std::cout << "Number of logical processes = " << systemCount << "\n";
-    #endif
-
-    topolgoy_descriptor topo_params;
-
-    ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
-    // ns3::LogComponentEnable("WcmpWeights", LOG_LEVEL_LOGIC);
-    // ns3::LogComponentEnable("WcmpStaticRouting", LOG_LEVEL_LOGIC);
-
-    #if MPI_ENABLED
-    if (MpiInterface::GetSystemId() == 0) {
-    #endif
-        CommandLine cmd(__FILE__);
-        cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
-        cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params.linkDelay);
-        cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
-        cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
-        cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
-        cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
-        cmd.Parse(argc, argv);
-
-        logDescriptors(&topo_params);
-    #if MPI_ENABLED
-    }
+    SWARM_INFO("Number of logical processes = " << systemCount);
     #endif
     
     // Create the topology
@@ -893,51 +860,15 @@ int main(int argc, char *argv[]) {
 
     uint32_t totalNumberOfServers = nodes.params.numPods * nodes.params.switchRadix * nodes.params.numServers / 2;
 
-    #if MPI_ENABLED
-    if (MpiInterface::GetSystemId() == 0) {
-    #endif
-        NS_LOG_INFO("[INFO] Total number of servers " << totalNumberOfServers);
-    #if MPI_ENABLED
-    }
-    #endif
+    SWARM_INFO("Total number of servers " << totalNumberOfServers);
 
     for (uint32_t i = 0; i < totalNumberOfServers; i++) {
         for (uint32_t j = 0; j < totalNumberOfServers; j++) {
             if (i == j)
                 continue;
-            nodes.bidirectionalCbrBetweenHosts(i, j);
+            nodes.unidirectionalCbrBetweenHosts(i, j);
         }
     }
-
-    // nodes.bidirectionalCbrBetweenHosts(0, 1);
-    // nodes.bidirectionalCbrBetweenHosts(0, 2);
-    // nodes.bidirectionalCbrBetweenHosts(0, 3);
-    // nodes.bidirectionalCbrBetweenHosts(0, 4);
-    // nodes.bidirectionalCbrBetweenHosts(0, 5);
-    // nodes.bidirectionalCbrBetweenHosts(0, 6);
-    // nodes.bidirectionalCbrBetweenHosts(0, 7);
-
-    // nodes.bidirectionalCbrBetweenHosts(1, 0);
-    // nodes.bidirectionalCbrBetweenHosts(1, 2);
-    // nodes.bidirectionalCbrBetweenHosts(1, 3);
-    // nodes.bidirectionalCbrBetweenHosts(1, 4);
-    // nodes.bidirectionalCbrBetweenHosts(1, 5);
-    // nodes.bidirectionalCbrBetweenHosts(1, 6);
-    // nodes.bidirectionalCbrBetweenHosts(1, 7);
-
-    // nodes.bidirectionalCbrBetweenHosts(4, 0);
-    // nodes.bidirectionalCbrBetweenHosts(4, 1);
-    // nodes.bidirectionalCbrBetweenHosts(4, 2);
-    // nodes.bidirectionalCbrBetweenHosts(4, 3);
-    // nodes.bidirectionalCbrBetweenHosts(4, 5);
-    // nodes.bidirectionalCbrBetweenHosts(4, 6);
-    // nodes.bidirectionalCbrBetweenHosts(4, 7);
-    // nodes.bidirectionalCbrBetweenHosts(0, 2, "5Gbps");
-
-    // nodes.unidirectionalCbrBetweenHosts(0, 1);
-    // nodes.unidirectionalCbrBetweenHosts(4, 5);
-    // nodes.echoBetweenHosts(0, 4);
-    // nodes.bidirectionalCbrBetweenHosts(0, 4, "1Mbps");
     
     nodes.startApplications(1.0, 4.0);
 
@@ -951,7 +882,7 @@ int main(int argc, char *argv[]) {
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getAggregate(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
 
-    // ShowProgress s = ShowProgress(Seconds(1), std::cerr);
+    ShowProgress s = ShowProgress(Seconds(1), std::cerr);
     
     Simulator::Stop(Seconds(5.0));
     Simulator::Run();

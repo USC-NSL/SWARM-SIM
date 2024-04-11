@@ -27,7 +27,7 @@ configure: copy
 
 # Note: Using MPI disables log messages, since it uses the optmized NS-3 build
 configure-mpi:
-	ns3/ns3 configure --enable-mpi --enable-examples --enable-modules $(INCLUDE_MODULES_MPI) -d optimized --filter-module-examples-and-tests mpi
+	ns3/ns3 configure --enable-mpi --enable-examples --enable-tests --enable-modules $(INCLUDE_MODULES_MPI) -d optimized --filter-module-examples-and-tests mpi
 
 build: copy
 	@echo "Building swarm simulation"
