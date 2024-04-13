@@ -3,9 +3,6 @@
 #include "ns3/applications-module.h"
 #include "ns3/wcmp-static-routing-helper.h"
 
-// #if !MPI_ENABLED
-#include "ns3/mobility-helper.h"
-// #endif
 
 using namespace ns3;
 
@@ -13,33 +10,17 @@ NS_LOG_COMPONENT_DEFINE(COMPONENT_NAME);
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
     SWARM_INFO("Building FatTree with the following params:");
+    SWARM_INFO("\tLink Rate = " << topo_params->linkRate << " Gbps");
+    SWARM_INFO("\tLink Delay = " << topo_params->linkDelay << " us");
+    SWARM_INFO("\tSwitch Radix = " << topo_params->switchRadix);
+    SWARM_INFO("\tNumber of Servers Per Edge = " << topo_params->numServers);
+    SWARM_INFO("\tNumber of Pods = " << topo_params->numPods);
 
-    char buf[128];
-    int n;
-
-    n = snprintf(buf, 128, "\tLink Rate = %d Gbps", topo_params->linkRate);
-    buf[n] = '\0';
-    SWARM_INFO(buf);
-    
-    n = snprintf(buf, 128, "\tLink Delay = %d us", topo_params->linkDelay);
-    buf[n] = '\0';
-    SWARM_INFO(buf);
-    
-    n = snprintf(buf, 128, "\tSwitch Radix = %d", topo_params->switchRadix);
-    buf[n] = '\0';
-    SWARM_INFO(buf);
-    
-    n = snprintf(buf, 128, "\tNumber of Servers Per Edge = %d", topo_params->numServers);
-    buf[n] = '\0';
-    SWARM_INFO(buf);
-    
-    n = snprintf(buf, 128, "\tNumber of Pods = %d", topo_params->numPods);
-    buf[n] = '\0';
-    SWARM_INFO(buf);
-
+    #if NETANIM_ENABLED
     if (topo_params->animate) {
         SWARM_INFO("Will output NetAnim XML file to " + ANIM_FILE_OUTPUT);
     }
+    #endif /* NETANIM_ENABLED */
 
     if (topo_params->switchRadix / 2 < topo_params->numServers) {
         SWARM_WARN("Number of servers exceeds half the radix. This topology is oversubscribed!");
@@ -70,7 +51,7 @@ void ClosTopology :: createCoreMPI() {
         this->coreSwitchesOdd.Add(CreateObject<Node>((i % (systemCount / 2) * 2) + 1));
     }
 }
-#endif
+#endif /* MPI_ENABLED */
 
 void ClosTopology :: createTopology() {
     /**
@@ -98,7 +79,7 @@ void ClosTopology :: createTopology() {
     // We separate the core to an ODD and EVEN part for easier linking
     this->coreSwitchesEven.Create(this->params.switchRadix / 2);
     this->coreSwitchesOdd.Create(this->params.switchRadix / 2);
-    #endif
+    #endif /* MPI_ENABLED */
     
     // We separate aggregate and edges for each pod for easier linking
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
@@ -174,14 +155,12 @@ void ClosTopology :: createLinks() {
     // Edge to Server links
     this->connectServers();
 
-    // p2p.EnablePcapAll("swarm-pcap");
-
     // Animate?
+    #if NETANIM_ENABLED
     if (this->params.animate) {
-        // #if !MPI_ENABLED
         this->setNodeCoordinates();
-        // #endif
     }
+    #endif /* NETANIM_ENABLED */
 }
 
 void ClosTopology :: createServers() {
@@ -570,7 +549,7 @@ void ClosTopology :: enableAggregateBackupPaths() {
     }
 }
 
-// #if !MPI_ENABLED
+#if NETANIM_ENABLED
 void ClosTopology :: setNodeCoordinates() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
@@ -635,7 +614,7 @@ void ClosTopology :: setNodeCoordinates() {
         }
     }
 }
-// #endif
+#endif /* NETANIM_ENABLED */
 
 void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval) {
     UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
@@ -653,7 +632,6 @@ void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_
     uint32_t port = this->getNextPort(server_host);
     Ptr<Node> ptr;
     
-    // NS_LOG_INFO("Called with port = " << port << " for server host " << server_host);
     if ((ptr = this->getHost(server_host))) {
         PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
         this->serverApplications[server_host].Add(sink.Install(this->getHost(server_host)));
@@ -821,7 +799,15 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
     cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
     cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
+
+    #if NETANIM_ENABLED
     cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
+    #endif /* NETANIM_ENABLED */
+
+    #if MPI_ENABLED
+    cmd.AddValue("mpi", "Enable MPI", topo_params.mpi);
+    #endif /* MPI_ENABLED */
+
     cmd.Parse(argc, argv);
 
     logDescriptors(&topo_params);
@@ -830,13 +816,12 @@ int main(int argc, char *argv[]) {
     // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
     MpiInterface::Enable(&argc, &argv);
-    // SinkTracer::Init();
 
     systemId = MpiInterface::GetSystemId();
     systemCount = MpiInterface::GetSize();
 
     SWARM_INFO("Number of logical processes = " << systemCount);
-    #endif
+    #endif /* MPI_ENABLED */
     
     // Create the topology
     ClosTopology nodes = ClosTopology(topo_params);

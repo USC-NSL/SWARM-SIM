@@ -1,37 +1,55 @@
 // Use MPI
 #define MPI_ENABLED 1
+// Use Netanim
+#define NETANIM_ENABLED 1
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 
-// #if !MPI_ENABLED
-#include "ns3/netanim-module.h"
-// #else
-#include "ns3/mpi-module.h"
-// #include "ns3/mpi-test-fixtures.h"
-// #endif
-
-using namespace std;
-
-#if MPI_ENABLED
-#define NUM_LP 8
-#endif
-
-// If MPI fails to work ...
-uint32_t systemId = 0;
-uint32_t systemCount = 1;
-
+#if NETANIM_ENABLED
 /**
- * Component name
+ * Netanim headers
 */
-const char* COMPONENT_NAME = "SWARMSimulation";
+#include "ns3/netanim-module.h"
+#include "ns3/mobility-helper.h"
 
 /**
  * Animation file output
 */
 string ANIM_FILE_OUTPUT = "swarm-anim.xml";
+
+/**
+ * Some constants for animation file outputs
+*/
+#define CORE_Y 0.0
+#define AGG_Y 100.0
+#define EDGE_Y 200.0
+#define SERVER_Y 250.0
+#define SERVER_DELTA 30.0
+#define WIDTH 600.0
+#define NODE_SIZE 8.0
+#endif /* NETANIM_ENABLED */
+
+#if MPI_ENABLED
+#include "ns3/mpi-module.h"
+#endif /* MPI_ENABLED */
+
+using namespace std;
+
+/**
+ * When using MPI:
+ *  - systemId is the rank of the current process
+ *  - systemCount is the number of LPs
+*/
+uint32_t systemId = 0;
+uint32_t systemCount = 1;
+
+/**
+ * Component name for logging
+*/
+const char* COMPONENT_NAME = "SWARMSimulation";
 
 
 /**
@@ -75,22 +93,15 @@ typedef enum topology_level_t {
     EDGE, AGGREGATE, CORE
 } topology_level;
 
-
 /**
- * Some constants for animation file outputs
+ * WCMP routing priority.
+ * Static routing is 0, so this should be less than that.
 */
-#define CORE_Y 0.0
-#define AGG_Y 100.0
-#define EDGE_Y 200.0
-#define SERVER_Y 250.0
-#define SERVER_DELTA 30.0
-#define WIDTH 600.0
-#define NODE_SIZE 8.0
-
-// WCMP routing priority
 #define WCMP_ROUTING_PRIORITY -20
 
-// Direct and Backup path metric
+/**
+ * Direct and Backup path metrics
+*/
 #define DIRECT_PATH_METRIC 1
 #define BACKUP_PATH_METRIC 10
 
@@ -139,7 +150,10 @@ typedef enum topology_level_t {
     } while (false)                                         \
 
 
-// Drop tail queue maximum length
+/**
+ * Drop tail queue max length
+ *  @note Not used yet ...
+*/
 const uint32_t MAX_PACKET_PER_QUEUE = 10;
 
 /**
@@ -152,6 +166,7 @@ typedef struct topology_descriptor_t {
     uint32_t numServers = DEFAULT_NUM_SERVERS;
     uint32_t numPods = DEFAULT_NUM_PODS;
     bool animate = false;
+    bool mpi = false;
 } topolgoy_descriptor;
 
 /**
@@ -217,11 +232,10 @@ class ClosTopology {
         // Used to get a free port for a host
         unordered_map<uint32_t, uint16_t> portMap;
  
-        // #if !MPI_ENABLED
-        // For NetAnim
+        #if NETANIM_ENABLED
         ns3::AnimationInterface *anim = NULL;
         void setNodeCoordinates();
-        // #endif
+        #endif /* NETANIM_ENABLED */
 
         void createServers();
         void connectServers();
@@ -247,7 +261,10 @@ class ClosTopology {
 
         void setupServerRouting();
         void setupCoreRouting();
-        void installWcmpStack();        // MUST be called before creating interfaces
+        
+        // MUST be called before creating interfaces
+        void installWcmpStack();
+
         void doEcmp();
         void enableAggregateBackupPaths();
 

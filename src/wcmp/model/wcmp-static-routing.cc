@@ -53,6 +53,14 @@ WcmpStaticRouting :: WcmpStaticRouting()
     NS_LOG_FUNCTION(this);
 }
 
+WcmpStaticRouting :: WcmpStaticRouting(uint16_t level, level_mapper_func f) 
+    : m_ipv4(nullptr),
+      weights(level)
+{
+    this->m_level_mapper_func = f;
+    NS_LOG_FUNCTION(this);
+}
+
 WcmpStaticRouting :: ~WcmpStaticRouting() {
     NS_LOG_FUNCTION(this);
 }
@@ -205,7 +213,8 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
     }
 
     // Choose a routing table entry
-    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val);
+    uint16_t level = this->m_level_mapper_func(dest);
+    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val, level);
 
     if (!chosen) {
         // All interfaces are down
@@ -220,7 +229,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
     rtentry->SetGateway(chosen->GetGateway());
     rtentry->SetOutputDevice(m_ipv4->GetNetDevice(chosen->GetInterface()));
 
-    NS_LOG_LOGIC("WCMP lookup chose " << chosen->GetInterface());
+    NS_LOG_LOGIC("WCMP lookup chose " << chosen->GetInterface() << " on level " << level);
 
     return rtentry;
 }

@@ -23,6 +23,16 @@ class Node;
 namespace wcmp
 {
 
+/**
+ * Typedef forpPointer to a function that maps destiation Ipv4Address
+ * to a level index.
+*/
+typedef uint16_t (*level_mapper_func)(Ipv4Address);
+
+uint16_t constant_map(Ipv4Address dest) {
+    return (uint16_t) 0;
+}
+
 class WcmpStaticRouting : public Ipv4RoutingProtocol {
     private:
         /// The IPv4 stack instance
@@ -33,6 +43,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// Whether or not to add a route when an interface comes up
         bool m_add_route_on_up;
+
+        /// Pointer to a mapping function from destiation address to level indexx
+        level_mapper_func m_level_mapper_func = &constant_map;
 
         /// The WCMP hash calculator
         WcmpHasher hasher;
@@ -63,6 +76,7 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         static TypeId GetTypeId();
 
         WcmpStaticRouting();
+        WcmpStaticRouting(uint16_t level, level_mapper_func f);
         ~WcmpStaticRouting() override;
 
         /**

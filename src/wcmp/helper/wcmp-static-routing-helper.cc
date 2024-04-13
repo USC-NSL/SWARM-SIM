@@ -1,7 +1,6 @@
-#include "wcmp-static-routing-helper.h"
 #include "ns3/ptr.h"
-#include "ns3/wcmp-static-routing.h"
 #include "ns3/node.h"
+#include "wcmp-static-routing-helper.h"
 
 namespace ns3
 {
