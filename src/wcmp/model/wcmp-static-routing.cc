@@ -4,6 +4,7 @@
 #include "ns3/node.h"
 #include "ns3/boolean.h"
 #include "ns3/simulator.h"
+#include "ns3/integer.h"
 
 #include <iomanip>
 
@@ -42,19 +43,36 @@ WcmpStaticRouting :: GetTypeId() {
                 BooleanValue(false),
                 MakeBooleanAccessor(&WcmpStaticRouting::m_add_route_on_up),
                 MakeBooleanChecker()
+            )
+            .AddAttribute(
+                "level",
+                "The number of levels on the WCMP hash table",
+                IntegerValue(0),
+                MakeIntegerAccessor(&WcmpStaticRouting::m_levels),
+                MakeIntegerChecker<uint16_t>(1)
             );
     
     return tid;
 }
 
 WcmpStaticRouting :: WcmpStaticRouting() 
-    : m_ipv4(nullptr)
+    : m_ipv4(nullptr),
+      m_levels(1)
+{
+    NS_LOG_FUNCTION(this);
+}
+
+WcmpStaticRouting :: WcmpStaticRouting(uint16_t level)
+    : m_ipv4(nullptr),
+      m_levels(level),
+      weights(level)
 {
     NS_LOG_FUNCTION(this);
 }
 
 WcmpStaticRouting :: WcmpStaticRouting(uint16_t level, level_mapper_func f) 
     : m_ipv4(nullptr),
+      m_levels(level),
       weights(level)
 {
     this->m_level_mapper_func = f;
@@ -169,7 +187,8 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
     }
 
     // Choose a routing table entry
-    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val);
+    uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
+    Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val, level);
 
     if (!chosen) {
         // All interfaces are down
@@ -213,7 +232,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
     }
 
     // Choose a routing table entry
-    uint16_t level = this->m_level_mapper_func(dest);
+    uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
     Ipv4RoutingTableEntry *chosen = this->weights.choose(entries, hash_val, level);
 
     if (!chosen) {
@@ -381,8 +400,8 @@ WcmpStaticRouting :: AddWildcardRoute(uint32_t interface, uint32_t metric)
 }
 
 void 
-WcmpStaticRouting :: SetInterfaceWeight(uint32_t interface, uint16_t weight) {
-    this->weights.set_weight(interface, weight);
+WcmpStaticRouting :: SetInterfaceWeight(uint32_t interface, uint16_t level, uint16_t weight) {
+    this->weights.set_weight(interface, level, weight);
 }
 
 void 
@@ -462,6 +481,11 @@ WcmpStaticRouting :: GetNRoutes() const {
     return this->m_networkRoutes.size();
 }
 
+uint16_t
+WcmpStaticRouting :: GetLevels() const {
+    return this->m_levels;
+}
+
 uint32_t 
 WcmpStaticRouting :: GetMetric(uint32_t index) const{
     uint32_t tmp = 0;
@@ -503,39 +527,43 @@ WcmpStaticRouting :: PrintRoutingTable(Ptr<OutputStreamWrapper> stream, Time::Un
 
     *os << "Node: " << m_ipv4->GetObject<Node>()->GetId() << ", Time: " << Now().As(unit)
         << ", Local time: " << m_ipv4->GetObject<Node>()->GetLocalTime().As(unit)
-        << ", WcmpStaticRouting table" << std::endl;
+        << ", WcmpStaticRouting" << std::endl;
 
     if (GetNRoutes()) {
         *os << "Destination     Metric Iface    Weight State"
             << std::endl;
-        for (uint32_t j = 0; j < m_networkRoutes.size(); ++j) {
-            std::ostringstream dest;
-            Ipv4RoutingTableEntry entry = GetRoute(j);
-            dest << entry.GetDest();
-            *os << std::setw(16) << dest.str();
-            *os << std::setw(7) << GetMetric(j);
+        
+        for (uint16_t level = 0; level < GetLevels(); level++) {
+            *os << "================ LEVEL " << std::setw(2) << level << " ================" << std::endl;
+            *os << "-----------------------" << "--" << "-----------------" << std::endl;
             
-            NS_LOG_LOGIC("Printing entry with destination " << entry.GetDest() << " and interface " << entry.GetInterface());
+            for (uint32_t j = 0; j < m_networkRoutes.size(); ++j) {
+                std::ostringstream dest;
+                Ipv4RoutingTableEntry entry = GetRoute(j);
+                dest << entry.GetDest();
+                *os << std::setw(16) << dest.str();
+                *os << std::setw(7) << GetMetric(j);
 
-            if (!Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface())).empty())
-            {
-                *os << std::setw(9) << Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface()));
-            }
-            else
-            {
-                *os << std::setw(9) << entry.GetInterface();
-            }
+                if (!Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface())).empty())
+                {
+                    *os << std::setw(9) << Names::FindName(m_ipv4->GetNetDevice(entry.GetInterface()));
+                }
+                else
+                {
+                    *os << std::setw(9) << entry.GetInterface();
+                }
 
-            *os << std::setw(7) << weights.get_weight(entry.GetInterface());
+                *os << std::setw(7) << weights.get_weight(entry.GetInterface(), level);
 
-            if (m_ipv4->IsUp(entry.GetInterface())) {
-                *os << "Up";
-            }
-            else {
-                *os << "Down";
-            }
+                if (m_ipv4->IsUp(entry.GetInterface())) {
+                    *os << "Up";
+                }
+                else {
+                    *os << "Down";
+                }
 
-            *os << std::endl;
+                *os << std::endl;
+            }
         }
     }
 

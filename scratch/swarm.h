@@ -1,12 +1,26 @@
+/**
+ * Usually, we would just pass compile flags from command line like a normal person,
+ * but passing CXXFLAGS or CXXFLAGS_EXTRA from `ns3` is very wonky. 
+ * So just set the variables manually from here.
+*/
+
+
 // Use MPI
+#ifndef MPI_ENABLED
 #define MPI_ENABLED 1
+#endif
 // Use Netanim
+#ifndef NETANIM_ENABLED
 #define NETANIM_ENABLED 1
+#endif
 
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
+#include "ns3/wcmp-static-routing-helper.h"
+
+using namespace std;
 
 #if NETANIM_ENABLED
 /**
@@ -35,8 +49,6 @@ string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 #if MPI_ENABLED
 #include "ns3/mpi-module.h"
 #endif /* MPI_ENABLED */
-
-using namespace std;
 
 /**
  * When using MPI:
@@ -112,12 +124,15 @@ typedef enum topology_level_t {
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
 
+#define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
+#define PROGRESS_BAR_WIDTH 70
+
 /**
  * Logging definitions
 */
 #ifndef SWARM_LOG_CONDITION
-#define SWARM_LOG_CONDITION if (MpiInterface::GetSystemId() == 0)
-#endif
+#define SWARM_LOG_CONDITION if (systemId == 0)
+#endif /* MPI_ENABLED */
 
 #define SWARM_INFO_ALL(msg)                                 \
     SWARM_LOG_CONDITION                                     \
@@ -168,6 +183,13 @@ typedef struct topology_descriptor_t {
     bool animate = false;
     bool mpi = false;
 } topolgoy_descriptor;
+
+/**
+ * Our level mapper function for WCMP stacks on aggregation and edge
+ * nodes.
+ * We'll declare it like this here and then bind it later.
+*/
+ns3::level_mapper_func wcmp_level_mapper;
 
 /**
  * This class will keep the topology node containers
@@ -391,5 +413,11 @@ void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t 
 void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
 void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
 void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+
+uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);
+
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args);
 template<typename... Args> void schedule(double t, link_attribute_change_func func, Args... args);
+
+void reportProgress(double end);
+void DoReportProgress(double end);

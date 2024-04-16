@@ -1,7 +1,6 @@
 #include "swarm.h"
 #include "ns3/show-progress.h"
 #include "ns3/applications-module.h"
-#include "ns3/wcmp-static-routing-helper.h"
 
 
 using namespace ns3;
@@ -460,7 +459,7 @@ void ClosTopology :: setupCoreRouting() {
 void ClosTopology :: installWcmpStack() {
     InternetStackHelper internetHelper;
     Ipv4ListRoutingHelper listHelper;
-    WcmpStaticRoutingHelper wcmpHelper;
+    WcmpStaticRoutingHelper wcmpHelper((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ipv4StaticRoutingHelper staticHelper;
     
     listHelper.Add(staticHelper, 0);
@@ -777,6 +776,46 @@ void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_
     topology->doChangeDelay(src_level, src_idx, dst_level, dst_idx, delayStr);
 }
 
+// uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
+//     /**
+//      * Each WCMP switch will maintain multiple tables for each
+//      * ToR. The ToR index can be found by chunking the destination
+//      * IP address.
+//      * This function thus should just get the ToR index from the dest.
+//      * Now, the IP address if of the form `10.p.e.s`, where
+//      *  - `p` is the pod num, in [0, numPods)
+//      *  - `e` is edge index, in [0, switchRadix/2)
+//      *  - `s` is server index, in [0, numServers)
+//      * 
+//      * In our WCMP scheme, the level is equal to the ToR index, which is equal to
+//      *  
+//      *      p * switchRadix/2 + e
+//     */
+//     uint32_t ipaddr_val = dest.Get();
+//     uint8_t *p = (uint8_t *)&ipaddr_val;
+
+//     return (uint16_t) (p[1] * topo_params->switchRadix/2 + p[2]);
+// }
+
+uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
+    /**
+     * Each WCMP switch will maintain multiple tables for each
+     * pod. The pod index can be found by chunking the destination
+     * IP address.
+     * This function thus should just get the ToR index from the dest.
+     * Now, the IP address if of the form `10.p.e.s`, where
+     *  - `p` is the pod num, in [0, numPods)
+     *  - `e` is edge index, in [0, switchRadix/2)
+     *  - `s` is server index, in [0, numServers)
+     * 
+     * In our WCMP scheme, the level is equal to the pod index.
+    */
+    uint32_t ipaddr_val = dest.Get();
+    uint8_t *p = (uint8_t *)&ipaddr_val;
+
+    return (uint16_t) p[1];
+}
+
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args) {
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
 }
@@ -785,10 +824,40 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
 }
 
+void reportProgress(double end) {
+    float progress;
+    progress = Simulator::Now().GetSeconds() / end;
+    int pos = PROGRESS_BAR_WIDTH * progress;
+    static double delta = end * TICK_PROGRESS_EVERY_WHAT_PERCENT / 100.0;
+
+    std::cout << "[INFO] [";
+    for (int i = 0; i < PROGRESS_BAR_WIDTH; i++) {
+        if (i < pos) std::cout << "=";
+        else if (i == pos) std::cout << ">";
+        else std::cout << " ";
+    }
+    std::cout << "] " << int(progress * 100.0) << "%\r";
+    std::cout.flush();
+
+    if (progress < 1.0) {
+        Simulator::Schedule(ns3::Seconds(delta), reportProgress, end);
+    }
+    else {
+        SWARM_INFO("Run finished!");
+    }
+}
+
+void DoReportProgress(double end) {
+    if (systemId != 0)
+        return;
+    Simulator::Schedule(Simulator::Now(), reportProgress, end);
+}
+
 int main(int argc, char *argv[]) {
     Time::SetResolution(Time::US);
 
     topolgoy_descriptor topo_params;
+    double end = 5.0;
 
     ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
     // ns3::LogComponentEnable("PacketSink", LOG_LEVEL_ALL);
@@ -799,6 +868,7 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
     cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
     cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
+    cmd.AddValue("end", "When to end simulation", end);
 
     #if NETANIM_ENABLED
     cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
@@ -810,8 +880,6 @@ int main(int argc, char *argv[]) {
 
     cmd.Parse(argc, argv);
 
-    logDescriptors(&topo_params);
-
     #if MPI_ENABLED
     // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
     GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
@@ -822,8 +890,17 @@ int main(int argc, char *argv[]) {
 
     SWARM_INFO("Number of logical processes = " << systemCount);
     #endif /* MPI_ENABLED */
+
+    logDescriptors(&topo_params);
     
-    // Create the topology
+    SWARM_INFO("Creating SWARM topology");
+
+    // First, bind our level mapping function for WCMP
+    wcmp_level_mapper = [topo_params](Ipv4Address dest) {
+        return podLevelMapper(dest, &topo_params);
+    };
+
+    
     ClosTopology nodes = ClosTopology(topo_params);
     nodes.createTopology();
     nodes.createLinks();
@@ -854,6 +931,8 @@ int main(int argc, char *argv[]) {
             nodes.unidirectionalCbrBetweenHosts(i, j);
         }
     }
+
+    SWARM_INFO("Starting applications");
     
     nodes.startApplications(1.0, 4.0);
 
@@ -861,15 +940,15 @@ int main(int argc, char *argv[]) {
     // schedule(1.01, changeDelay, &nodes, EDGE, 0, AGGREGATE, 0, "500us");
     // schedule(1.02, changeBandwidth, &nodes, EDGE, 0, AGGREGATE, 1, "1kbps");
 
-    // Ptr<OutputStreamWrapper> routingStream =
-    //     Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
-    // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getEdge(0), routingStream);
+    Ptr<OutputStreamWrapper> routingStream =
+        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getEdge(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getAggregate(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
 
-    ShowProgress s = ShowProgress(Seconds(1), std::cerr);
+    DoReportProgress(end);
     
-    Simulator::Stop(Seconds(5.0));
+    Simulator::Stop(Seconds(end));
     Simulator::Run();
     Simulator::Destroy();
 

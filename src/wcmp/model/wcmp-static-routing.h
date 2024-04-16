@@ -1,6 +1,7 @@
 #ifndef WCMP_STATIC_ROUTING_H
 #define WCMP_STATIC_ROUTING_H
 
+#include <functional>
 #include "ns3/ipv4-routing-table-entry.h"
 #include "ns3/ipv4-routing-protocol.h"
 #include "wcmp-hasher.h"
@@ -18,20 +19,16 @@
 namespace ns3
 {
 
+/**
+ * Template for function that maps an Ipv4 destination address to a 
+ * level index.
+*/
+typedef std::function<uint16_t(Ipv4Address)> level_mapper_func;
+
 class Node;
 
 namespace wcmp
 {
-
-/**
- * Typedef forpPointer to a function that maps destiation Ipv4Address
- * to a level index.
-*/
-typedef uint16_t (*level_mapper_func)(Ipv4Address);
-
-uint16_t constant_map(Ipv4Address dest) {
-    return (uint16_t) 0;
-}
 
 class WcmpStaticRouting : public Ipv4RoutingProtocol {
     private:
@@ -44,8 +41,11 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Whether or not to add a route when an interface comes up
         bool m_add_route_on_up;
 
-        /// Pointer to a mapping function from destiation address to level indexx
-        level_mapper_func m_level_mapper_func = &constant_map;
+        /// Number of levels for the WCMP hash atable
+        uint16_t m_levels;
+
+        /// Pointer to a mapping function from destiation address to level index
+        level_mapper_func m_level_mapper_func = nullptr;
 
         /// The WCMP hash calculator
         WcmpHasher hasher;
@@ -76,6 +76,7 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         static TypeId GetTypeId();
 
         WcmpStaticRouting();
+        WcmpStaticRouting(uint16_t level);
         WcmpStaticRouting(uint16_t level, level_mapper_func f);
         ~WcmpStaticRouting() override;
 
@@ -112,10 +113,15 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
                             uint32_t metric = 0);
 
         void AddWildcardRoute(uint32_t interface, uint32_t metric);
-        void SetInterfaceWeight(uint32_t interface, uint16_t weight);
+        void SetInterfaceWeight(uint32_t interface, uint16_t level, uint16_t weight);
+        
+        void SetMapperFunction(level_mapper_func f) {
+            this->m_level_mapper_func = f;
+        }
 
         uint32_t GetNRoutes() const;
         uint32_t GetMetric(uint32_t index) const;
+        uint16_t GetLevels() const;
         Ipv4RoutingTableEntry GetRoute(uint32_t index) const;
 };
 

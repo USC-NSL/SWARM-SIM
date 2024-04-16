@@ -10,6 +10,7 @@ namespace ns3
 class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
     public:
         WcmpStaticRoutingHelper();
+        WcmpStaticRoutingHelper(uint16_t level, level_mapper_func f);
         WcmpStaticRoutingHelper(const WcmpStaticRoutingHelper& o);
 
         WcmpStaticRoutingHelper& operator=(const WcmpStaticRoutingHelper&) = delete;
@@ -18,10 +19,11 @@ class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
         Ptr<Ipv4RoutingProtocol> Create(Ptr<Node> node) const override;
 
         Ptr<wcmp::WcmpStaticRouting> GetWcmpStaticRouting(Ptr<Ipv4> ipv4) const;
-        void SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t weight);
+        void SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t level, uint16_t weight);
 
     private:
         ObjectFactory m_factory;
+        level_mapper_func m_func = nullptr;
 };
 
 } // namespace ns3

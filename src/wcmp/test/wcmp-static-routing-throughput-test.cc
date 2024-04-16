@@ -152,8 +152,8 @@ WcmpStaticRoutingThroughputTest :: emitAtRegularIntervals(Ptr<Node> sender, std:
 void WcmpStaticRoutingThroughputTest :: DoAdjustWeights(Ptr<Node> wcmpNode) {
     WcmpStaticRoutingHelper wcmp;
     Ptr<Ipv4> ipv4 = wcmpNode->GetObject<Ipv4>();
-    wcmp.SetInterfaceWeight(ipv4, 3, 2);
-    wcmp.SetInterfaceWeight(ipv4, 4, 3);
+    wcmp.SetInterfaceWeight(ipv4, 3, 0, 2);
+    wcmp.SetInterfaceWeight(ipv4, 4, 0, 3);
 }
 
 void WcmpStaticRoutingThroughputTest :: AdjustWeightsAt(Ptr<Node> wcmpNode, double when) {

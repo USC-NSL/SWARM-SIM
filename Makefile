@@ -9,55 +9,67 @@ INCLUDE_MODULES_ALL = $(INCLUDE_MODULES_MIN);netanim;mpi
 TEST_MODULES = wcmp
 
 DIRS = src scratch
+NS3_DIR=$(shell readlink ns3)
 
 check:
-	@echo "Checking for the ns3 symlink"
+	$(info Checking for the ns3 symlink)
 	@if [ ! -L ns3 ]; then\
 		echo "Did not find the symlink";\
 		echo "You must link 'ns3' to an existing ns3 distribution";\
 		echo "\n\tln -s <path to ns3 distribution> ns3\n";\
 		exit 0;\
 	fi
+	$(info NS3 absolute path is ${NS3_DIR})
 
 copy: check
 	@for dir in $(DIRS); do \
 		rsync -av $$dir/ ns3/$$dir/ ;\
 	done
-	OUTPUT_DIR=$(shell readlink ns3)/build
-	@echo $(OUTPUT_DIR)
 
 configure-all: copy
-	@echo "Configuring with MPI and NETANIM"
-	ns3/ns3 configure --enable-tests --enable-mpi --enable-modules $(INCLUDE_MODULES_ALL) --filter-module-examples-and-tests $(TEST_MODULES) --out $(OUTPUT_DIR)
+	$(info Configuring with MPI and NETANIM)
+	@ cd ${NS3_DIR}; \
+	./ns3 configure --enable-tests --enable-mpi --enable-modules "${INCLUDE_MODULES_ALL}" --filter-module-examples-and-tests "${TEST_MODULES}" \
 
 configure-mpi: copy
-	@echo "Configuring with MPI"
-	ns3/ns3 configure --enable-mpi --enable-tests --enable-modules $(INCLUDE_MODULES_MPI) --filter-module-examples-and-tests "mpi;$(TEST_MODULES)" --out $(OUTPUT_DIR)
+	$(info Configuring with MPI)
+	@ cd ${NS3_DIR}; \
+	export CMAKE_CXX_FLAGS="-DNETANIM_ENABLED=0"; \
+	./ns3 configure --enable-mpi --enable-tests --enable-modules "${INCLUDE_MODULES_MPI}" --filter-module-examples-and-tests "mpi;${TEST_MODULES}" \
 
 configure-netanim: copy
-	@echo "Configuring with NETANIM"
-	ns3/ns3 configure --enable-tests --enable-modules $(INCLUDE_MODULES_NETANIM) --filter-module-examples-and-tests $(TEST_MODULES) --out $(OUTPUT_DIR)
+	$(info Configuring with NETANIM)
+	@ cd ${NS3_DIR}; \
+	export CMAKE_CXX_FLAGS="-DMPI_ENABLED=0"; \
+	./ns3 configure --enable-tests --enable-modules "${INCLUDE_MODULES_NETANIM}" --filter-module-examples-and-tests "${TEST_MODULES}" \
 
 configure-min: copy
-	@echo "Configuring with minimum dependencies"
-	ns3/ns3 configure --enable-tests --enable-modules $(INCLUDE_MODULES_MIN) --filter-module-examples-and-tests $(TEST_MODULES) --out $(OUTPUT_DIR)
+	$(info Configuring with minimum dependencies)
+	@ cd ${NS3_DIR}; \
+	export CMAKE_CXX_FLAGS="-DMPI_ENABLED=0 -DNETANIM_ENABLED=0"; \
+	./ns3 configure --enable-tests --enable-modules "${INCLUDE_MODULES_MIN}" --filter-module-examples-and-tests "${TEST_MODULES}"; \
+	./ns3 build \
 
 configure-opt: copy
-	@echo "Configuring optimized build"
-	ns3/ns3 configure -d optimized --enable-mpi --enable-modules $(INCLUDE_MODULES_MPI) --out $(OUTPUT_DIR)
+	$(info Configuring optimized build)
+	@ cd ${NS3_DIR}; \
+	export CMAKE_CXX_FLAGS="-DNETANIM_ENABLED=0"; \
+	./ns3 configure -d optimized --enable-mpi --enable-modules "${INCLUDE_MODULES_MPI}" \
 
 build: copy
-	@echo "Building swarm simulation"
-	ns3/ns3
+	$(info Building swarm simulation)
+	@ cd ${NS3_DIR}; \
+	./ns3 build \
 
 clean:
-	@echo "Cleaning current results and outputs"
+	$(info Cleaning current results and outputs)
 	@rm -f *.o
 	@rm -f ns3/*.pcap
 	@rm -f ns3/*.xml
 	@rm -f ns3/*.routes
 
 purge: check clean
-	@echo "Purging current distribution"
-	@cd $(readlink ns3); ./ns3 distclean; \
+	$(info Purging current distribution)
+	@ cd ${NS3_DIR}; \
+	./ns3 distclean \
 

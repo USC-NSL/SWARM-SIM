@@ -26,6 +26,7 @@ class WcmpWeights {
          * We have two maps:
          *  - A map of interface index to a boolean, saying whether the interface is up or down
          *  - A map of interface index (and pod number if needed) to a weight value
+         * Usually, we use a uint32_t of the form <pod_num, if_index> as the key of the second map.
         */
         mutable std::unordered_map<uint32_t, bool> states;
         mutable std::map<uint32_t, uint16_t> weights;
@@ -46,16 +47,16 @@ class WcmpWeights {
         WcmpWeights(Ptr<Ipv4> ipv4);
         WcmpWeights(Ptr<Ipv4> ipv4, uint16_t levels);
 
-        uint16_t get_weight(uint32_t if_index) const {
-            return weights[if_index];
+        uint16_t get_weight(uint32_t if_index, uint16_t level) const {
+            return weights[_GET_LEVELED_IF(level, if_index)];
         }
 
         bool is_if_up(uint32_t if_index) {
             return states[if_index];
         }
 
-        void set_weight(uint32_t if_index, uint16_t weight) {
-            this->weights[if_index] = weight;
+        void set_weight(uint32_t if_index, uint16_t level, uint16_t weight) {
+            this->weights[_GET_LEVELED_IF(level, if_index)] = weight;
         }
 
         void set_state(uint32_t if_index, bool state) {
