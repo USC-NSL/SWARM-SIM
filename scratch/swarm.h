@@ -7,7 +7,7 @@
 
 // Use MPI
 #ifndef MPI_ENABLED
-#define MPI_ENABLED 1
+#define MPI_ENABLED 0
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
@@ -182,6 +182,7 @@ typedef struct topology_descriptor_t {
     uint32_t numPods = DEFAULT_NUM_PODS;
     bool animate = false;
     bool mpi = false;
+    bool enableEdgeBounceBackup = false;
 } topolgoy_descriptor;
 
 /**

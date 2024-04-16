@@ -1,5 +1,5 @@
 #include "swarm.h"
-#include "ns3/show-progress.h"
+#include <chrono>
 #include "ns3/applications-module.h"
 
 
@@ -842,9 +842,6 @@ void reportProgress(double end) {
     if (progress < 1.0) {
         Simulator::Schedule(ns3::Seconds(delta), reportProgress, end);
     }
-    else {
-        SWARM_INFO("Run finished!");
-    }
 }
 
 void DoReportProgress(double end) {
@@ -868,6 +865,7 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
     cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
     cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
+    cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params.enableEdgeBounceBackup);
     cmd.AddValue("end", "When to end simulation", end);
 
     #if NETANIM_ENABLED
@@ -915,10 +913,10 @@ int main(int argc, char *argv[]) {
     nodes.doEcmp();
 
     // Enable backup paths on aggregations
-    nodes.enableAggregateBackupPaths();
-
-    // nodes.echoBetweenHosts(0, 4);
-    // nodes.echoBetweenHosts(1, 5);
+    if (topo_params.enableEdgeBounceBackup) {
+        SWARM_INFO("Enabling intra-pod backup routes");
+        nodes.enableAggregateBackupPaths();
+    }
 
     uint32_t totalNumberOfServers = nodes.params.numPods * nodes.params.switchRadix * nodes.params.numServers / 2;
 
@@ -931,6 +929,7 @@ int main(int argc, char *argv[]) {
             nodes.unidirectionalCbrBetweenHosts(i, j);
         }
     }
+    // nodes.unidirectionalCbrBetweenHosts(0, 4);
 
     SWARM_INFO("Starting applications");
     
@@ -948,9 +947,23 @@ int main(int argc, char *argv[]) {
 
     DoReportProgress(end);
     
+    auto t_start = std::chrono::system_clock::now();
+
     Simulator::Stop(Seconds(end));
     Simulator::Run();
     Simulator::Destroy();
+
+    std::cout << "[INFO] [";
+    for (int i = 0; i < PROGRESS_BAR_WIDTH; i++)
+        std::cout << "=";
+    std::cout << "] 100%\n";
+    std::cout.flush();
+
+    auto t_end = std::chrono::system_clock::now();
+
+    std::chrono::duration<float> took = t_end - t_start;
+
+    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " ms");
 
     #if MPI_ENABLED
     MpiInterface::Disable();
