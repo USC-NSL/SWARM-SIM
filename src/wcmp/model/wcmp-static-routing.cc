@@ -418,6 +418,10 @@ WcmpStaticRouting :: NotifyInterfaceUp(uint32_t i) {
     if (this->m_add_route_on_up) {
         // TODO: Add route
     }
+
+    // Invoke the handler if there is one
+    if (m_if_up_func)
+        m_if_up_func(i);
 }
 
 void
@@ -433,6 +437,10 @@ WcmpStaticRouting :: NotifyInterfaceDown(uint32_t i) {
     if (this->m_add_route_on_up) {
         // TODO: Remove the route
     }
+
+    // Invoke the handler if there is one
+    if (m_if_down_func)
+        m_if_down_func(i);
 }
 
 void 

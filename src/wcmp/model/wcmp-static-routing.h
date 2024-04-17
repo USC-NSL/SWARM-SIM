@@ -25,6 +25,13 @@ namespace ns3
 */
 typedef std::function<uint16_t(Ipv4Address)> level_mapper_func;
 
+/**
+ * Template for function that is invoked when an interface goes down/up.
+ * By default, it only uses the interface index and the local data in the
+ * routing protocol instance.
+*/
+typedef std::function<void(uint32_t)> if_up_down_func;
+
 class Node;
 
 namespace wcmp
@@ -46,6 +53,10 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// Pointer to a mapping function from destiation address to level index
         level_mapper_func m_level_mapper_func = nullptr;
+
+        /// Pointer to a function that handles interface up/down
+        if_up_down_func m_if_up_func = nullptr;
+        if_up_down_func m_if_down_func = nullptr;
 
         /// The WCMP hash calculator
         WcmpHasher hasher;
@@ -117,6 +128,13 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         
         void SetMapperFunction(level_mapper_func f) {
             this->m_level_mapper_func = f;
+        }
+
+        void SetIfDownFunction(if_up_down_func f) {
+            this->m_if_down_func = f;
+        }
+        void SetIfUpFunction(if_up_down_func f) {
+            this->m_if_up_func = f;
         }
 
         uint32_t GetNRoutes() const;

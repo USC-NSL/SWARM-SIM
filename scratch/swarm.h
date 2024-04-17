@@ -193,6 +193,12 @@ typedef struct topology_descriptor_t {
 ns3::level_mapper_func wcmp_level_mapper;
 
 /**
+ * We'll use these functions to react to link events
+*/
+ns3::if_up_down_func wcmp_if_down_func;
+ns3::if_up_down_func wcmp_if_up_func;
+
+/**
  * This class will keep the topology node containers
  * 
  * Switches in each layer are indexed from 0, starting from

@@ -1,2 +1,4 @@
 ns3
 *.o
+__pycache__
+gen

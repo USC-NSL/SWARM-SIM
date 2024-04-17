@@ -187,6 +187,8 @@ void ClosTopology :: createServers() {
 void ClosTopology :: connectServers() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
     PointToPointHelper p2p;
+    p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(this->params.linkRate) + "Gbps"));
+    p2p.SetChannelAttribute("Delay", StringValue(std::to_string(this->params.linkDelay) + "us"));
 
     uint32_t tor_index, server_index;
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
@@ -922,14 +924,14 @@ int main(int argc, char *argv[]) {
 
     SWARM_INFO("Total number of servers " << totalNumberOfServers);
 
-    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-        for (uint32_t j = 0; j < totalNumberOfServers; j++) {
-            if (i == j)
-                continue;
-            nodes.unidirectionalCbrBetweenHosts(i, j);
-        }
-    }
-    // nodes.unidirectionalCbrBetweenHosts(0, 4);
+    // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+    //     for (uint32_t j = 0; j < totalNumberOfServers; j++) {
+    //         if (i == j)
+    //             continue;
+    //         nodes.unidirectionalCbrBetweenHosts(i, j);
+    //     }
+    // }
+    nodes.unidirectionalCbrBetweenHosts(0, 4);
 
     SWARM_INFO("Starting applications");
     
@@ -938,6 +940,8 @@ int main(int argc, char *argv[]) {
     // schedule(1.1, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
     // schedule(1.01, changeDelay, &nodes, EDGE, 0, AGGREGATE, 0, "500us");
     // schedule(1.02, changeBandwidth, &nodes, EDGE, 0, AGGREGATE, 1, "1kbps");
+    // schedule(1.3, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
+    schedule(1.3, disableLink, &nodes, AGGREGATE, 0, CORE, 0);
 
     Ptr<OutputStreamWrapper> routingStream =
         Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
@@ -963,7 +967,7 @@ int main(int argc, char *argv[]) {
 
     std::chrono::duration<float> took = t_end - t_start;
 
-    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " ms");
+    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
     #if MPI_ENABLED
     MpiInterface::Disable();
