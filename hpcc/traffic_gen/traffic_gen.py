@@ -2,6 +2,7 @@
 
 import os
 import sys
+import tqdm
 import random
 import math
 import heapq
@@ -80,7 +81,6 @@ if __name__ == "__main__":
 					 help = "the percentage of the traffic load to the network capacity, by default 0.3", default = "0.3")
 	parser.add_argument("-t", "--time", dest = "time", help = "the total run time (s), by default 10", default = "10")
 	parser.add_argument("-o", "--output", dest = "output", help = "the output file")
-	parser.add_argument("--nano", action="store_true", help="Use nanoseconds resolution instead of microseconds")
 	args = parser.parse_args()
 
 	if args.list:
@@ -104,6 +104,9 @@ if __name__ == "__main__":
 
 	output = args.output if args.output else os.path.join(GENERATED_DIR, f"{nhost}_{args.bandwidth}_{load}_{args.time}_{args.cdf_file}.txt")
 
+	pbar = tqdm.tqdm(total=n_flow_estimate)
+	count = 0
+	PBAR_STEP = 100
 	with open(output, "w") as ofile:
 		ofile.write("%d \n"%n_flow_estimate)
 		host_list = [(MEDIAN_START_TIME_NS + int(poisson(avg_inter_arrival)), i) for i in range(nhost)]
@@ -111,7 +114,7 @@ if __name__ == "__main__":
 		
 		batch = list()
 		while len(host_list) > 0:
-			t,src = host_list[0]
+			t, src = host_list[0]
 			inter_t = int(poisson(avg_inter_arrival))
 			dst = random.randint(0, nhost-1)
 			
@@ -127,6 +130,11 @@ if __name__ == "__main__":
 				n_flow += 1
 				ofile.write("%d %d %d %.9f\n" % (src, dst, size, t * 1e-9))
 				heapq.heapreplace(host_list, (t + inter_t, src))
-
+			
+			count += 1
+			if (count % PBAR_STEP == 0):
+				pbar.update(PBAR_STEP)
+				count = 0
+		pbar.close()
 		ofile.seek(0)
 		ofile.write("%d"%n_flow)

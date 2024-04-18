@@ -9,11 +9,11 @@
 
 // Use MPI
 #ifndef MPI_ENABLED
-#define MPI_ENABLED 0
+#define MPI_ENABLED 1
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "flow_scheduler.h"
@@ -110,6 +110,12 @@ typedef enum topology_level_t {
     EDGE, AGGREGATE, CORE
 } topology_level;
 
+typedef enum swarm_log_level_t {
+    DEBG, INFO,  WARN
+} swarm_log_level;
+
+swarm_log_level current_log_level = INFO;
+
 /**
  * WCMP routing priority.
  * Static routing is 0, so this should be less than that.
@@ -138,39 +144,49 @@ typedef enum topology_level_t {
 
 /**
  * Logging definitions
+ * These are basically NS-3 macros, with the exception
+ * that they do not get disabled in the optimized build.
 */
 #ifndef SWARM_LOG_CONDITION
 #define SWARM_LOG_CONDITION if (systemId == 0)
-#endif /* MPI_ENABLED */
+#endif
+
+#define SWARM_SET_LOG_LEVEL(level) current_log_level = level
+#define SWARM_LOG_UNCON(msg) std::clog << msg << "\n"
+
+#define SWARM_DEBG_ALL(msg)                                 \
+    do {                                                    \
+        if (current_log_level <= DEBG)                      \
+            SWARM_LOG_UNCON("[DEBG][" << systemId << "] "   \
+                << msg);                                    \
+    } while (false)                                         \
 
 #define SWARM_INFO_ALL(msg)                                 \
-    SWARM_LOG_CONDITION                                     \
     do {                                                    \
-        NS_LOG_INFO("[INFO][" << systemId << "] " << msg);  \
+        if (current_log_level <= INFO)                      \
+            SWARM_LOG_UNCON("[INFO][" << systemId << "] "   \
+                << msg);                                    \
     } while (false)                                         \
 
 #define SWARM_DEBG(msg)                                     \
     SWARM_LOG_CONDITION                                     \
     do {                                                    \
-        if (systemId == 0) {                                \
-            NS_LOG_DEBUG("[DEBG] " << msg);                 \
-        }                                                   \
+        if (current_log_level <= DEBG)                      \
+            SWARM_LOG_UNCON("[DEBG] " << msg);              \
     } while (false)                                         \
 
 #define SWARM_INFO(msg)                                     \
     SWARM_LOG_CONDITION                                     \
     do {                                                    \
-        if (systemId == 0) {                                \
-            NS_LOG_INFO("[INFO] " << msg);                  \
-        }                                                   \
+        if (current_log_level <= INFO)                      \
+            SWARM_LOG_UNCON("[INFO] " << msg);              \
     } while (false)                                         \
 
 #define SWARM_WARN(msg)                                     \
     SWARM_LOG_CONDITION                                     \
     do {                                                    \
-        if (systemId == 0) {                                \
-            NS_LOG_WARN("[WARN] " << msg);                  \
-        }                                                   \
+        if (current_log_level <= WARN)                      \
+            SWARM_LOG_UNCON("[WARN] " << msg);              \
     } while (false)                                         \
 
 
@@ -371,26 +387,38 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getHost(uint32_t edge_idx, uint32_t host_idx) const {
-            #if MPI_ENABLED
-            if (systemId != getSystemIdOfServer(host_idx))
-                return nullptr;
-            #endif
-
             return this->servers.at(edge_idx).Get(host_idx);
         }
 
         ns3::Ptr<ns3::Node> getHost(uint32_t host_idx) const {
-            #if MPI_ENABLED
-            if (systemId != getSystemIdOfServer(host_idx))
-                return nullptr;
-            #endif
-
             uint32_t idx = host_idx % this->params.numServers;
             uint32_t edge_idx = host_idx / this->params.numServers;
             return this->getHost(edge_idx, idx);
         }
 
-        pair<uint32_t, uint32_t> getPodAndIndex(uint32_t full_idx) {
+        ns3::Ptr<ns3::Node> getLocalHost(uint32_t edge_idx, uint32_t host_idx) const {
+            #if MPI_ENABLED
+            if (systemId != getSystemIdOfServer(host_idx)) {
+                SWARM_DEBG_ALL("Ignoring request for host " << host_idx << " since its systemId is " << getSystemIdOfServer(host_idx));
+                return nullptr;
+            }
+            #endif
+
+            return getHost(edge_idx, host_idx);
+        }
+
+        ns3::Ptr<ns3::Node> getLocalHost(uint32_t host_idx) const {
+            #if MPI_ENABLED
+            if (systemId != getSystemIdOfServer(host_idx)) {
+                SWARM_DEBG_ALL("Ignoring request for host " << host_idx << " since its systemId is " << getSystemIdOfServer(host_idx));
+                return nullptr;
+            }
+            #endif
+
+            return getHost(host_idx);
+        }
+
+        pair<uint32_t, uint32_t> getPodAndIndex(uint32_t full_idx) const {
             uint32_t idx = full_idx % (this->params.switchRadix / 2);
             uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
             return make_pair(pod_num, idx);
@@ -398,7 +426,7 @@ class ClosTopology {
 
         void installTcpPacketSinks() {            
             for (uint32_t idx = 0; idx < this->serverApplications.size(); idx++) {
-                ns3::Ptr<ns3::Node> ptr = this->getHost(idx);
+                ns3::Ptr<ns3::Node> ptr = this->getLocalHost(idx);
                 if (!ptr)
                     continue;
 
@@ -414,7 +442,7 @@ class ClosTopology {
             }
         }
 
-        uint32_t getSystemIdOfServer(uint32_t host_idx) {
+        uint32_t getSystemIdOfServer(uint32_t host_idx) const {
             uint32_t edge_idx = host_idx / this->params.numServers;
 
             return getPodAndIndex(edge_idx).first % systemCount;

@@ -9,12 +9,14 @@ FlowScheduler :: FlowScheduler(const char *flow_file)
     : m_flow_file_path(flow_file)
 {
     m_flow_file_stream.open(m_flow_file_path);
+    readFlowFile();
 }
 
 FlowScheduler :: FlowScheduler(string flow_file) 
     : m_flow_file_path(flow_file.c_str())
 {
     m_flow_file_stream.open(m_flow_file_path);
+    readFlowFile();
 }
 
 FlowScheduler :: FlowScheduler(const char *flow_file, host_flow_dispatcher dispatcher) 
@@ -22,6 +24,7 @@ FlowScheduler :: FlowScheduler(const char *flow_file, host_flow_dispatcher dispa
       m_dispatcher(dispatcher)
 {
     m_flow_file_stream.open(m_flow_file_path);
+    readFlowFile();
 }
 
 FlowScheduler :: FlowScheduler(string flow_file, host_flow_dispatcher dispatcher) 
@@ -29,6 +32,7 @@ FlowScheduler :: FlowScheduler(string flow_file, host_flow_dispatcher dispatcher
       m_dispatcher(dispatcher)
 {
     m_flow_file_stream.open(m_flow_file_path);
+    readFlowFile();
 }
 
 void

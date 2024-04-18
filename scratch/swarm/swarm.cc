@@ -1,5 +1,6 @@
-#include "swarm.h"
 #include <chrono>
+#include "swarm.h"
+#include "ns3/flow-monitor-helper.h"
 
 
 using namespace ns3;
@@ -10,7 +11,7 @@ void
 FlowScheduler :: readFlowFile() {
     m_flow_file_stream >> num_flows;
 
-    NS_LOG_INFO("[INFO] Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
+    SWARM_INFO("Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
 }
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
@@ -639,21 +640,22 @@ void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_
     uint32_t port = this->getNextPort(server_host);
     Ptr<Node> ptr;
     
-    if ((ptr = this->getHost(server_host))) {
+    if ((ptr = this->getLocalHost(server_host))) {
         PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
-        this->serverApplications[server_host].Add(sink.Install(this->getHost(server_host)));
-        SWARM_DEBG("Installed sink on " << server_host);
+        this->serverApplications[server_host].Add(sink.Install(ptr));
+        SWARM_DEBG_ALL("Installed sink on " << server_host);
     }
 
-    if ((ptr = this->getHost(client_host))) {
+    if ((ptr = this->getLocalHost(client_host))) {
         OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
-        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
-
         onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(rate));
         onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
-        SWARM_DEBG("Installed client on " << client_host);
+        onOffClient.SetAttribute("MaxBytes", UintegerValue(0));
+
+        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
+        SWARM_DEBG_ALL("Installed client on " << client_host);
     }
 }
 
@@ -661,21 +663,21 @@ void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t
     uint32_t port = this->getNextPort(server_host);
     Ptr<Node> ptr;
 
-    if ((ptr = this->getHost(server_host))) {
+    if ((ptr = this->getLocalHost(server_host))) {
         UdpEchoServerHelper echoServer(port);
         this->serverApplications[server_host].Add(echoServer.Install(ptr));
-        SWARM_DEBG("Installed server on " << server_host);
+        SWARM_DEBG_ALL("Installed server on " << server_host);
     }
 
-    if ((ptr = this->getHost(client_host))) {
-        OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));    
-        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
-
+    if ((ptr = this->getLocalHost(client_host))) {
+        OnOffHelper onOffClient("ns3::UdpSocketFactory", InetSocketAddress(this->getServerAddress(server_host), port));
         onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(rate));
         onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
-        SWARM_DEBG("Installed client on " << client_host);
+
+        this->serverApplications[client_host].Add(onOffClient.Install(ptr));
+        SWARM_DEBG_ALL("Installed client on " << client_host);
     }
 }
 
@@ -735,7 +737,7 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
         src_level, src_idx, dst_level, dst_idx
     );
 
-    SWARM_DEBG("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG_ALL("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
@@ -747,7 +749,7 @@ void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, to
         src_level, src_idx, dst_level, dst_idx
     );
 
-    SWARM_DEBG("Enabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG_ALL("Enabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->SetUp(std::get<1>(props));
@@ -759,7 +761,7 @@ void ClosTopology :: doChangeBandwidth(topology_level src_level, uint32_t src_id
         src_level, src_idx, dst_level, dst_idx
     );
 
-    SWARM_DEBG("Changing bandwidth on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG_ALL("Changing bandwidth on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
@@ -771,7 +773,7 @@ void ClosTopology :: doChangeDelay(topology_level src_level, uint32_t src_idx, t
         src_level, src_idx, dst_level, dst_idx
     );
 
-    SWARM_DEBG("Changing delay on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG_ALL("Changing delay on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
@@ -793,27 +795,6 @@ void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t 
 void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr) {
     topology->doChangeDelay(src_level, src_idx, dst_level, dst_idx, delayStr);
 }
-
-// uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
-//     /**
-//      * Each WCMP switch will maintain multiple tables for each
-//      * ToR. The ToR index can be found by chunking the destination
-//      * IP address.
-//      * This function thus should just get the ToR index from the dest.
-//      * Now, the IP address if of the form `10.p.e.s`, where
-//      *  - `p` is the pod num, in [0, numPods)
-//      *  - `e` is edge index, in [0, switchRadix/2)
-//      *  - `s` is server index, in [0, numServers)
-//      * 
-//      * In our WCMP scheme, the level is equal to the ToR index, which is equal to
-//      *  
-//      *      p * switchRadix/2 + e
-//     */
-//     uint32_t ipaddr_val = dest.Get();
-//     uint8_t *p = (uint8_t *)&ipaddr_val;
-
-//     return (uint16_t) (p[1] * topo_params->switchRadix/2 + p[2]);
-// }
 
 uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
     /**
@@ -876,14 +857,14 @@ void reportProgress(double end) {
     int pos = PROGRESS_BAR_WIDTH * progress;
     static double delta = end * TICK_PROGRESS_EVERY_WHAT_PERCENT / 100.0;
 
-    std::cout << "[INFO] [";
+    std::clog << "[INFO] [";
     for (int i = 0; i < PROGRESS_BAR_WIDTH; i++) {
-        if (i < pos) std::cout << "=";
-        else if (i == pos) std::cout << ">";
-        else std::cout << " ";
+        if (i < pos) std::clog << "=";
+        else if (i == pos) std::clog << ">";
+        else std::clog << " ";
     }
-    std::cout << "] " << int(progress * 100.0) << "%\r";
-    std::cout.flush();
+    std::clog << "] " << int(progress * 100.0) << "%\r";
+    std::clog.flush();
 
     if (progress < 1.0) {
         Simulator::Schedule(ns3::Seconds(delta), reportProgress, end);
@@ -897,15 +878,14 @@ void DoReportProgress(double end) {
 }
 
 int main(int argc, char *argv[]) {
-    // Time::SetResolution(Time::US);
-
     topolgoy_descriptor topo_params;
     double end = 4.0;
     std::string flow_file_path = "";
     std::string screamRate = "";
+    bool micro = false;
+    bool verbose = false;
 
-    ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
-    // ns3::LogComponentEnable("PacketSink", LOG_LEVEL_ALL);
+    SWARM_SET_LOG_LEVEL(INFO);
 
     CommandLine cmd(__FILE__);
     cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
@@ -917,6 +897,14 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("flow", "Path of the flow file", flow_file_path);
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", screamRate);
     cmd.AddValue("end", "When to end simulation", end);
+    cmd.AddValue("micro", "Set time resolution to micro-seconds", micro);
+    cmd.AddValue("verbose", "Enable debug log outputs", verbose);
+
+    if (micro)
+        Time::SetResolution(Time::US);
+
+    if (verbose)
+        SWARM_SET_LOG_LEVEL(DEBG);
 
     #if NETANIM_ENABLED
     cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
@@ -997,6 +985,11 @@ int main(int argc, char *argv[]) {
     
     nodes.startApplications(1.0, end);
 
+    // Setup flow monitor
+    Ptr<FlowMonitor> flowMonitor;
+    FlowMonitorHelper flowMonitorHelper;
+    flowMonitor = flowMonitorHelper.InstallAll();
+
     // schedule(1.1, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
     // schedule(1.01, changeDelay, &nodes, EDGE, 0, AGGREGATE, 0, "500us");
     // schedule(1.02, changeBandwidth, &nodes, EDGE, 0, AGGREGATE, 1, "1kbps");
@@ -1017,17 +1010,21 @@ int main(int argc, char *argv[]) {
     Simulator::Run();
     Simulator::Destroy();
 
-    std::cout << "[INFO] [";
-    for (int i = 0; i < PROGRESS_BAR_WIDTH; i++)
-        std::cout << "=";
-    std::cout << "] 100%\n";
-    std::cout.flush();
+    if (systemId == 0) {
+        std::clog << "[INFO] [";
+        for (int i = 0; i < PROGRESS_BAR_WIDTH; i++)
+            std::clog << "=";
+        std::clog << "] 100%\n";
+        std::clog.flush();
+    }
 
     auto t_end = std::chrono::system_clock::now();
 
     std::chrono::duration<float> took = t_end - t_start;
 
     SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
+
+    flowMonitor->SerializeToXmlFile("swarm-flows.xml", false, false);
 
     #if MPI_ENABLED
     MpiInterface::Disable();
