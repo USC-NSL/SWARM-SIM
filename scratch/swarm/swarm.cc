@@ -7,12 +7,6 @@ using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE(COMPONENT_NAME);
 
-void
-FlowScheduler :: readFlowFile() {
-    m_flow_file_stream >> num_flows;
-
-    SWARM_INFO("Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
-}
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
     SWARM_INFO("Building FatTree with the following params:");
@@ -832,13 +826,13 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
 
     Ptr<Node> ptr;
 
-    if ((ptr = topo->getHost(flow->src))) {
+    if ((ptr = topo->getLocalHost(flow->src))) {
         OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));    
 
         onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        onOffClient.SetAttribute("PacketSize", UintegerValue(flow->size));
+        onOffClient.SetAttribute("MaxBytes", UintegerValue(flow->size));
         onOffClient.Install(ptr).Start(Time(0));
     }
 }
@@ -851,7 +845,7 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
 }
 
-void reportProgress(double end) {
+void reportTimeProgress(double end) {
     float progress;
     progress = Simulator::Now().GetSeconds() / end;
     int pos = PROGRESS_BAR_WIDTH * progress;
@@ -867,14 +861,38 @@ void reportProgress(double end) {
     std::clog.flush();
 
     if (progress < 1.0) {
-        Simulator::Schedule(ns3::Seconds(delta), reportProgress, end);
+        Simulator::Schedule(ns3::Seconds(delta), reportTimeProgress, end);
     }
 }
 
-void DoReportProgress(double end) {
+// void reportFlowProgress(FlowScheduler *flowScheduler) {
+//     float progress;
+//     progress = flowScheduler->getNumberOfScheduledFlows() * 1.0 / flowScheduler->getNumFlows();
+//     int pos = PROGRESS_BAR_WIDTH * progress;
+//     static double delta = flowScheduler->getNumFlows() * TICK_PROGRESS_EVERY_WHAT_PERCENT / 100.0;
+
+//     std::clog << "[INFO] [";
+//     for (int i = 0; i < PROGRESS_BAR_WIDTH; i++) {
+//         if (i < pos) std::clog << "=";
+//         else if (i == pos) std::clog << ">";
+//         else std::clog << " ";
+//     }
+//     std::clog << "] " << int(progress * 100.0) << "%\r";
+//     std::clog.flush();
+
+//     if (progress < 1.0) {
+//         Simulator::Schedule(ns3::Seconds(delta), reportFlowProgress, flowScheduler);
+//     }
+// }
+
+void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
     if (systemId != 0)
         return;
-    Simulator::Schedule(Simulator::Now(), reportProgress, end);
+    
+    // if (flowSCheduler)
+    //     Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+    // else
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
 
 int main(int argc, char *argv[]) {
@@ -969,6 +987,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Get the flow file
+    FlowScheduler *flowScheduler = nullptr;
     if (flow_file_path.length()) {
         // Bind the flow dispatcher function
         host_flow_dispatcher_function = [nodes](host_flow *flow) {
@@ -979,8 +998,8 @@ int main(int argc, char *argv[]) {
         nodes.installTcpPacketSinks();
 
         // Create the flow scheduler
-        FlowScheduler flowScheduler = FlowScheduler(flow_file_path, host_flow_dispatcher_function);
-        flowScheduler.begin();
+        flowScheduler = new FlowScheduler(flow_file_path, host_flow_dispatcher_function);
+        flowScheduler->begin();
     }
     
     nodes.startApplications(1.0, end);
@@ -1002,7 +1021,7 @@ int main(int argc, char *argv[]) {
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getAggregate(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
 
-    DoReportProgress(end + QUIET_INTERVAL_LENGTH);
+    DoReportProgress(end + QUIET_INTERVAL_LENGTH, flowScheduler);
     
     auto t_start = std::chrono::system_clock::now();
 

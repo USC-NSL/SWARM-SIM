@@ -8,14 +8,12 @@ using namespace ns3;
 FlowScheduler :: FlowScheduler(const char *flow_file) 
     : m_flow_file_path(flow_file)
 {
-    m_flow_file_stream.open(m_flow_file_path);
     readFlowFile();
 }
 
 FlowScheduler :: FlowScheduler(string flow_file) 
     : m_flow_file_path(flow_file.c_str())
 {
-    m_flow_file_stream.open(m_flow_file_path);
     readFlowFile();
 }
 
@@ -23,7 +21,6 @@ FlowScheduler :: FlowScheduler(const char *flow_file, host_flow_dispatcher dispa
     : m_flow_file_path(flow_file),
       m_dispatcher(dispatcher)
 {
-    m_flow_file_stream.open(m_flow_file_path);
     readFlowFile();
 }
 
@@ -31,7 +28,6 @@ FlowScheduler :: FlowScheduler(string flow_file, host_flow_dispatcher dispatcher
     : m_flow_file_path(flow_file.c_str()),
       m_dispatcher(dispatcher)
 {
-    m_flow_file_stream.open(m_flow_file_path);
     readFlowFile();
 }
 
@@ -42,6 +38,7 @@ FlowScheduler :: getNextFlow() {
         >> m_current_flow.dst 
         >> m_current_flow.size 
         >> m_current_flow.t_arrival;
+    // std::clog << "Current time is " << m_current_flow.t_arrival << "\n";
 }
 
 void
@@ -49,12 +46,9 @@ FlowScheduler :: dispatchAndSchedule() {
     NS_ASSERT(m_dispatcher);
     NS_ASSERT(m_current_flow.t_arrival > 0);
 
-    if (current_idx < num_flows) {
-        // Wait if it is not yet time
-        if (m_current_flow.t_arrival > Simulator::Now().GetDouble()) {
-            goto schedule_next;
-        }
+    // std::clog << "Current index is  " << current_idx << "\n";
 
+    while (current_idx < num_flows && Seconds(m_current_flow.t_arrival) == Simulator::Now()) {
         // Call the dispatcher
         m_dispatcher(&m_current_flow);
 
@@ -62,20 +56,29 @@ FlowScheduler :: dispatchAndSchedule() {
         getNextFlow();
         current_idx++;
     }
-    else {
-        m_flow_file_stream.close();
-        return;
-    }
 
-schedule_next:
-    Simulator::Schedule(
-        Seconds(m_current_flow.t_arrival) - Simulator::Now(),
-        &FlowScheduler::dispatchAndSchedule, this
-    );
+    if (current_idx < num_flows)
+        Simulator::Schedule(
+            Seconds(m_current_flow.t_arrival) - Simulator::Now(),
+            &FlowScheduler::dispatchAndSchedule, this
+        );
+    else
+        m_flow_file_stream.close();
+}
+
+void
+FlowScheduler :: readFlowFile() {
+    m_flow_file_stream.open(m_flow_file_path);
+    m_flow_file_stream >> num_flows;
+
+    // SWARM_INFO("Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
 }
 
 void 
 FlowScheduler :: begin() {
     getNextFlow();
-    dispatchAndSchedule();
+    Simulator::Schedule(
+        Seconds(m_current_flow.t_arrival) - Simulator::Now(),
+        &FlowScheduler::dispatchAndSchedule, this
+    );
 }

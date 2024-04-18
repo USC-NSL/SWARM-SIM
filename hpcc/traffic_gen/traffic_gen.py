@@ -108,7 +108,7 @@ if __name__ == "__main__":
 	count = 0
 	PBAR_STEP = 100
 	with open(output, "w") as ofile:
-		ofile.write("%d \n"%n_flow_estimate)
+		ofile.write("%d\n"%n_flow_estimate)
 		host_list = [(MEDIAN_START_TIME_NS + int(poisson(avg_inter_arrival)), i) for i in range(nhost)]
 		heapq.heapify(host_list)
 		

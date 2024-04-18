@@ -498,7 +498,8 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo);
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args);
 template<typename... Args> void schedule(double t, link_attribute_change_func func, Args... args);
 
-void reportProgress(double end);
-void DoReportProgress(double end);
+void reportTimeProgress(double end);
+void reportFlowProgress(FlowScheduler *flowSCheduler);
+void DoReportProgress(double end, FlowScheduler *flowSCheduler);
 
 #endif /* SWARM_H */
