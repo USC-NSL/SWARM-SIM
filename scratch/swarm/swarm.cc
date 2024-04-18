@@ -1,11 +1,17 @@
 #include "swarm.h"
 #include <chrono>
-#include "ns3/applications-module.h"
 
 
 using namespace ns3;
 
 NS_LOG_COMPONENT_DEFINE(COMPONENT_NAME);
+
+void
+FlowScheduler :: readFlowFile() {
+    m_flow_file_stream >> num_flows;
+
+    NS_LOG_INFO("[INFO] Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
+}
 
 void logDescriptors(topolgoy_descriptor *topo_params) {
     SWARM_INFO("Building FatTree with the following params:");
@@ -673,6 +679,16 @@ void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t
     }
 }
 
+void ClosTopology :: doAllToAllTcp(uint32_t totalNumberOfServers, std::string scream_rate) {
+    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        for (uint32_t j = 0; j < totalNumberOfServers; j++) {
+            if (i == j)
+                continue;
+            this->unidirectionalCbrBetweenHosts(i, j, scream_rate);
+        }
+    }
+}
+
 std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTopology :: getLinkInterfaceIndices(topology_level src_level, 
     uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) 
 {
@@ -818,6 +834,34 @@ uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo
     return (uint16_t) p[1];
 }
 
+void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
+    /**
+     * Given a host_flow struct, we should decide how to schedule it on 
+     * the current topology.
+     * Usually this is simple:
+     *  - If needed, pick a free tcp port on the source
+     *  - Create an OnOff application with maxPacketSize set to the flow
+     *    size.
+     *  - Since FlowScheduler should call this, it is OK to immediatelly 
+     *    call start after installing the application
+     * 
+     * This should also be compatible with MPI.
+     * All flows will be collected by a packet sink on the destination.
+    */
+
+    Ptr<Node> ptr;
+
+    if ((ptr = topo->getHost(flow->src))) {
+        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));    
+
+        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
+        onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
+        onOffClient.SetAttribute("PacketSize", UintegerValue(flow->size));
+        onOffClient.Install(ptr).Start(Time(0));
+    }
+}
+
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args) {
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
 }
@@ -853,10 +897,12 @@ void DoReportProgress(double end) {
 }
 
 int main(int argc, char *argv[]) {
-    Time::SetResolution(Time::US);
+    // Time::SetResolution(Time::US);
 
     topolgoy_descriptor topo_params;
-    double end = 5.0;
+    double end = 4.0;
+    std::string flow_file_path = "";
+    std::string screamRate = "";
 
     ns3::LogComponentEnable(COMPONENT_NAME, LOG_LEVEL_INFO);
     // ns3::LogComponentEnable("PacketSink", LOG_LEVEL_ALL);
@@ -868,6 +914,8 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
     cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
     cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params.enableEdgeBounceBackup);
+    cmd.AddValue("flow", "Path of the flow file", flow_file_path);
+    cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", screamRate);
     cmd.AddValue("end", "When to end simulation", end);
 
     #if NETANIM_ENABLED
@@ -924,24 +972,36 @@ int main(int argc, char *argv[]) {
 
     SWARM_INFO("Total number of servers " << totalNumberOfServers);
 
-    // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-    //     for (uint32_t j = 0; j < totalNumberOfServers; j++) {
-    //         if (i == j)
-    //             continue;
-    //         nodes.unidirectionalCbrBetweenHosts(i, j);
-    //     }
-    // }
-    nodes.unidirectionalCbrBetweenHosts(0, 4);
 
     SWARM_INFO("Starting applications");
+
+    // Do constant all-to-all stream if needed
+    if (screamRate.length()) {
+        nodes.doAllToAllTcp(totalNumberOfServers, screamRate);
+    }
+
+    // Get the flow file
+    if (flow_file_path.length()) {
+        // Bind the flow dispatcher function
+        host_flow_dispatcher_function = [nodes](host_flow *flow) {
+            return closHostFlowDispatcher(flow, &nodes);
+        };
+
+        // Install packet sinks on each server
+        nodes.installTcpPacketSinks();
+
+        // Create the flow scheduler
+        FlowScheduler flowScheduler = FlowScheduler(flow_file_path, host_flow_dispatcher_function);
+        flowScheduler.begin();
+    }
     
-    nodes.startApplications(1.0, 4.0);
+    nodes.startApplications(1.0, end);
 
     // schedule(1.1, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
     // schedule(1.01, changeDelay, &nodes, EDGE, 0, AGGREGATE, 0, "500us");
     // schedule(1.02, changeBandwidth, &nodes, EDGE, 0, AGGREGATE, 1, "1kbps");
     // schedule(1.3, disableLink, &nodes, EDGE, 0, AGGREGATE, 0);
-    schedule(1.3, disableLink, &nodes, AGGREGATE, 0, CORE, 0);
+    // schedule(1.3, disableLink, &nodes, AGGREGATE, 0, CORE, 0);
 
     Ptr<OutputStreamWrapper> routingStream =
         Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
@@ -949,11 +1009,11 @@ int main(int argc, char *argv[]) {
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getAggregate(0), routingStream);
     // Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
 
-    DoReportProgress(end);
+    DoReportProgress(end + QUIET_INTERVAL_LENGTH);
     
     auto t_start = std::chrono::system_clock::now();
 
-    Simulator::Stop(Seconds(end));
+    Simulator::Stop(Seconds(end + QUIET_INTERVAL_LENGTH));
     Simulator::Run();
     Simulator::Destroy();
 

@@ -4,6 +4,8 @@
  * So just set the variables manually from here.
 */
 
+#ifndef SWARM_H
+#define SWARM_H
 
 // Use MPI
 #ifndef MPI_ENABLED
@@ -14,9 +16,12 @@
 #define NETANIM_ENABLED 1
 #endif
 
+#include "flow_scheduler.h"
+
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
+#include "ns3/applications-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/wcmp-static-routing-helper.h"
 
@@ -121,11 +126,15 @@ typedef enum topology_level_t {
  * Misc. definitions
 */
 #define UDP_DISCARD_PORT 9
+#define TCP_DISCARD_PORT 10
+
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
 #define PROGRESS_BAR_WIDTH 70
+
+#define QUIET_INTERVAL_LENGTH 1.0
 
 /**
  * Logging definitions
@@ -197,6 +206,11 @@ ns3::level_mapper_func wcmp_level_mapper;
 */
 ns3::if_up_down_func wcmp_if_down_func;
 ns3::if_up_down_func wcmp_if_up_func;
+
+/**
+ * Host flwo dispatcher
+*/
+host_flow_dispatcher host_flow_dispatcher_function;
 
 /**
  * This class will keep the topology node containers
@@ -305,6 +319,7 @@ class ClosTopology {
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
+        void doAllToAllTcp(uint32_t totalNumberOfServers, string scream_rate);
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];
@@ -319,6 +334,13 @@ class ClosTopology {
 
         ns3::Ipv4Address getServerAddress(uint32_t edge_idx, uint32_t server_idx) {
             return this->serverInterfaces[edge_idx].GetAddress(server_idx);
+        }
+
+        ns3::Ipv4Address getServerAddress(uint32_t host_idx) const {
+            uint32_t server_idx = host_idx % this->params.numServers;
+            uint32_t edge_idx = host_idx / this->params.numServers;
+
+            return this->serverInterfaces.at(edge_idx).GetAddress(server_idx);
         }
 
         ns3::Ptr<ns3::Node> getCore(uint32_t idx) {
@@ -348,16 +370,16 @@ class ClosTopology {
             return this->getEdge(pod_num, idx);
         }
 
-        ns3::Ptr<ns3::Node> getHost(uint32_t edge_idx, uint32_t host_idx) {
+        ns3::Ptr<ns3::Node> getHost(uint32_t edge_idx, uint32_t host_idx) const {
             #if MPI_ENABLED
             if (systemId != getSystemIdOfServer(host_idx))
                 return nullptr;
             #endif
 
-            return this->servers[edge_idx].Get(host_idx);
+            return this->servers.at(edge_idx).Get(host_idx);
         }
 
-        ns3::Ptr<ns3::Node> getHost(uint32_t host_idx) {
+        ns3::Ptr<ns3::Node> getHost(uint32_t host_idx) const {
             #if MPI_ENABLED
             if (systemId != getSystemIdOfServer(host_idx))
                 return nullptr;
@@ -372,6 +394,17 @@ class ClosTopology {
             uint32_t idx = full_idx % (this->params.switchRadix / 2);
             uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
             return make_pair(pod_num, idx);
+        }
+
+        void installTcpPacketSinks() {            
+            for (uint32_t idx = 0; idx < this->serverApplications.size(); idx++) {
+                ns3::Ptr<ns3::Node> ptr = this->getHost(idx);
+                if (!ptr)
+                    continue;
+
+                ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
+                this->serverApplications[idx].Add(sink.Install(ptr));
+            }
         }
 
         void startApplications(double t_start, double t_finish) {
@@ -406,15 +439,25 @@ class ClosTopology {
         }
 };
 
-/**
+/************************************
  * Function pointer typedefs
+************************************/
+
+/**
+ * Functions that implement link attribute/state changes.
+ * Examples being functions that disable a link or change its bandwidth.
+ * 
+ * Note: These functions cannot be invoked on remote links (i.e. links that
+ * connect two distinct MPI logical processes). We will try to make sure this
+ * does not become a problem.
 */
 typedef void (*link_attribute_change_func)(ClosTopology*, topology_level, uint32_t, topology_level, uint32_t, const string);
 typedef void (*link_state_change_func)(ClosTopology*, topology_level, uint32_t, topology_level, uint32_t);
 
-/**
+/************************************
  * Function declarations
-*/
+************************************/
+
 void logDescriptors(topolgoy_descriptor *topo_params);
 void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
 void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
@@ -422,9 +465,12 @@ void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_
 void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
 
 uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);
+void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo);
 
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args);
 template<typename... Args> void schedule(double t, link_attribute_change_func func, Args... args);
 
 void reportProgress(double end);
 void DoReportProgress(double end);
+
+#endif /* SWARM_H */
