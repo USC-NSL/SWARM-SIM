@@ -20,4 +20,4 @@ Each line after that is a flow: `<source host> <dest host> 3 <dest port number> 
 ## Flow size distributions
 We provide 4 distributions. `WebSearch_distribution.txt` and `FbHdp_distribution.txt` are the ones used in the HPCC paper. `AliStorage2019.txt` are collected from Alibaba's production distributed storage system in 2019. `GoogleRPC2008.txt` are Google's RPC size distribution before 2008.
 
-**Note:** We moved these distribution files under `traffic_distributions`.
+**Note:** We moved these distribution files under `traffic_distributions`. Generated files by default will be stored under a `gen` directory in this folder.
