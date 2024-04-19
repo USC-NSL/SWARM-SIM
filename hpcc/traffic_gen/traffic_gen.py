@@ -11,7 +11,7 @@ from custom_rand import CustomRand
 
 TRAFFIC_DIST_DIR = "traffic_distributions"
 GENERATED_DIR = "gen"
-MEDIAN_START_TIME_NS = 2000000000
+MEDIAN_START_TIME_NS = 1000000000
 
 
 class Flow:
@@ -66,7 +66,7 @@ def print_manifest(avg, nflow_estimate, nhost, bandwidth, load, t):
 	print(f"Generating traffic for {nhost} hosts over {bandwidth} bandwidth with {int(load * 100)}% load\n")
 	print(f"\tNumber of flows: {nflow_estimate}")
 	print(f"\tAverage interarrival time: {avg}")
-	print(f"\tTotal time: {t} seconds")
+	print(f"\tTotal time: {t} seconds\n")
 
 
 if __name__ == "__main__":

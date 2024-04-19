@@ -138,9 +138,11 @@ swarm_log_level current_log_level = INFO;
 #define UDP_PACKET_SIZE_SMALL 64
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
+#define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
 #define PROGRESS_BAR_WIDTH 70
 
 #define QUIET_INTERVAL_LENGTH 1.0
+#define APPLICATION_START_TIME 1.0
 
 /**
  * Logging definitions
