@@ -48,6 +48,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Whether or not to add a route when an interface comes up
         bool m_add_route_on_up;
 
+        /// Whether or not to use the WCMP cache
+        bool m_use_cache;
+
         /// Number of levels for the WCMP hash atable
         uint16_t m_levels;
 
@@ -63,6 +66,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// WCMP weights
         WcmpWeights weights;
+
+        /// WCMP hash cache, speeds up lookup
+        std::unordered_map<uint32_t, std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>> wcmp_cache;
 
         /// Container for the network routes
         typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>> NetworkRoutes;
@@ -82,6 +88,31 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
     protected:
         void DoDispose() override;
+
+        void InvalidateCache() {
+            wcmp_cache.clear();
+        }
+
+        Ipv4RoutingTableEntry* LookupCache(uint32_t hash_val, Ipv4Address dest) {
+            auto res = wcmp_cache.find(hash_val);
+            if (res == wcmp_cache.end())
+                return nullptr;
+            
+            for (auto elem = res->second.begin(); elem != res->second.end(); elem++) {
+                if (elem->first == dest)
+                    return elem->second;
+            }
+
+            NS_ABORT_MSG("Invalid cache miss, this should not happen!");
+        }
+
+        void UpdateCache(uint32_t hash_val, Ipv4Address dest, Ipv4RoutingTableEntry *entry) {
+            auto res = wcmp_cache.find(hash_val);
+            if (res == wcmp_cache.end())
+                wcmp_cache[hash_val] = std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>{std::make_pair(dest, entry)};
+            else
+                wcmp_cache[hash_val].push_back(std::make_pair(dest, entry));
+        }
 
     public:
         static TypeId GetTypeId();

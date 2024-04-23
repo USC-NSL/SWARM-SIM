@@ -2,6 +2,9 @@
 #define FLOW_SCHEDULER_H
 
 #include <fstream>
+#include <map>
+#include <vector>
+#include <assert.h>
 #include <functional>
 
 using namespace std;
@@ -22,12 +25,34 @@ class FlowScheduler {
         const char *m_flow_file_path;
         ifstream m_flow_file_stream;
         host_flow m_current_flow = {0};
+
+        /**
+         * A migration, is another host sending some other hosts traffic on behalf of them.
+         * So essentially, if we say that `50 percent of host A traffic is migrated to B`, 
+         * we mean that for each flow entry that starts from A, there is 50 percent chance that
+         * we will send it from B instead.
+        */
+        map<uint32_t, map<uint32_t, uint8_t>> m_migrations;
         
         host_flow_dispatcher m_dispatcher = nullptr;
 
         void readFlowFile();
         void getNextFlow();
         void dispatchAndSchedule();
+
+        uint32_t getMigrationSource(uint32_t original_source) {
+            assert(this->m_migrations.count(original_source));
+
+            uint8_t sum = 0;
+            uint8_t r = (uint8_t) (rand() % 100);
+            for (auto const & elem: this->m_migrations[original_source]) {
+                if (r > sum)
+                    sum += elem.second;
+                else
+                    return elem.first;
+            }
+            return original_source;
+        }
 
     public:
         FlowScheduler(const char *flow_file);
@@ -46,6 +71,29 @@ class FlowScheduler {
 
         uint32_t getNumberOfScheduledFlows() const {
             return current_idx;
+        }
+
+        void migrateTo(uint32_t original_source, uint32_t migration_destination, uint8_t percent) {
+            // Is there are already migrated traffic?
+            if (m_migrations.count(original_source)) {
+                // Is there already traffic handled by the destination
+                if (m_migrations[original_source].count(migration_destination)) {
+                    // Add to it!
+                    m_migrations[original_source][migration_destination] += percent;
+                }
+                else
+                    m_migrations[original_source][migration_destination] = percent;
+            }
+            else
+                m_migrations[original_source][migration_destination] = percent;
+        }
+
+        void migrateBack(uint32_t original_source, uint32_t migration_destination, uint8_t percent) {
+            assert(m_migrations[original_source][migration_destination] >= percent);
+            
+            m_migrations[original_source][migration_destination] -= percent;
+            if (m_migrations[original_source][migration_destination] == 0)
+                m_migrations[original_source].erase(migration_destination);
         }
 };
 

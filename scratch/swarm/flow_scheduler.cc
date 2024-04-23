@@ -38,13 +38,18 @@ FlowScheduler :: getNextFlow() {
         >> m_current_flow.dst 
         >> m_current_flow.size 
         >> m_current_flow.t_arrival;
+    
+    // Should we migrate traffic?
+    if (m_migrations.count(m_current_flow.src)) {
+        m_current_flow.dst = getMigrationSource(m_current_flow.src);
+    }
     // std::clog << "Current time is " << m_current_flow.t_arrival << "\n";
 }
 
 void
 FlowScheduler :: dispatchAndSchedule() {
     NS_ASSERT(m_dispatcher);
-    NS_ASSERT(m_current_flow.t_arrival > 0);
+    // NS_ASSERT(m_current_flow.t_arrival > 0);
 
     // std::clog << "Current index is  " << current_idx << "\n";
 

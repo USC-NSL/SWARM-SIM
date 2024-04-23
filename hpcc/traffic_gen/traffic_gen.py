@@ -11,7 +11,7 @@ from custom_rand import CustomRand
 
 TRAFFIC_DIST_DIR = "traffic_distributions"
 GENERATED_DIR = "gen"
-MEDIAN_START_TIME_NS = 1000000000
+BASE_START_TIME_NS = 1000000000
 
 
 class Flow:
@@ -109,7 +109,7 @@ if __name__ == "__main__":
 	PBAR_STEP = 100
 	with open(output, "w") as ofile:
 		ofile.write("%d\n"%n_flow_estimate)
-		host_list = [(MEDIAN_START_TIME_NS + int(poisson(avg_inter_arrival)), i) for i in range(nhost)]
+		host_list = [(BASE_START_TIME_NS + int(poisson(avg_inter_arrival)), i) for i in range(nhost)]
 		heapq.heapify(host_list)
 		
 		batch = list()
@@ -121,7 +121,7 @@ if __name__ == "__main__":
 			while (dst == src):
 				dst = random.randint(0, nhost-1)
 			
-			if (t + inter_t > time + MEDIAN_START_TIME_NS):
+			if (t + inter_t > time + BASE_START_TIME_NS):
 				heapq.heappop(host_list)
 			else:
 				size = int(customRand.rand())

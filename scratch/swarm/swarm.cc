@@ -552,6 +552,40 @@ void ClosTopology :: enableAggregateBackupPaths() {
 }
 
 #if NETANIM_ENABLED
+
+// typedef struct color_t {
+//     uint8_t r, g, b;
+// } color;
+
+// inline void getColor(uint32_t idx, color *node_color) {
+//     switch (idx)
+//     {
+//     case 0:
+//         node_color->r=255;
+//         node_color->g=0;
+//         node_color->b=0;
+//         break;
+//     case 1:
+//         node_color->r=0;
+//         node_color->g=255;
+//         node_color->b=0;
+//         break;
+//     case 2:
+//         node_color->r=0;
+//         node_color->g=0;
+//         node_color->b=255;
+//         break;
+//     case 3:
+//         node_color->r=255;
+//         node_color->g=0;
+//         node_color->b=255;
+//         break;
+    
+//     default:
+//         break;
+//     }
+// }
+
 void ClosTopology :: setNodeCoordinates() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
@@ -573,6 +607,7 @@ void ClosTopology :: setNodeCoordinates() {
 
     // Core switches
     Ptr<Node> node;
+    // color color;
     double x_start = -WIDTH / 2;
     double delta_x = WIDTH / (this->params.switchRadix - 1);
     for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
@@ -581,10 +616,14 @@ void ClosTopology :: setNodeCoordinates() {
         this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
         this->anim->UpdateNodeDescription(node, "CORE-" + std::to_string(i));
 
+        // getColor(i%4, &color);
+        // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
         node = this->coreSwitchesOdd.Get(i);
         this->anim->SetConstantPosition(node, delta_x / 2 + i * delta_x, CORE_Y);
         this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
         this->anim->UpdateNodeDescription(node, "CORE-" + std::to_string(i + numAggAndEdgeeSwitchesPerPod));
+        // getColor(i%4+2, &color);
+        // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
     }
 
     // Aggregate/Edge switches and Servers
@@ -602,16 +641,22 @@ void ClosTopology :: setNodeCoordinates() {
             this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
             this->anim->UpdateNodeDescription(node, "AGG-" + std::to_string(idx));
 
+            // getColor(pod_num%4, &color);
+            // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
             node = this->edgeSwitches[pod_num].Get(i);
             this->anim->SetConstantPosition(node, x_middle, EDGE_Y);
             this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
             this->anim->UpdateNodeDescription(node, "EDGE-" + std::to_string(idx));
 
+            // getColor(pod_num%4, &color);
+            // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
             for (uint32_t j = 0; j < this->params.numServers; j++) {
                 node = this->servers[idx].Get(j);
                 this->anim->SetConstantPosition(node, x_middle + j * SERVER_DELTA - server_offset, SERVER_Y);
                 this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
                 this->anim->UpdateNodeDescription(node, "H-" + std::to_string(idx) + "-" + std::to_string(j));
+                // getColor(pod_num%4, &color);
+                // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
             }
         }
     }
@@ -726,7 +771,8 @@ std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTop
 }
 
 
-void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, 
+    uint32_t dst_idx, bool auto_mitiagate) {
     std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = this->getLinkInterfaceIndices(
         src_level, src_idx, dst_level, dst_idx
     );
@@ -736,9 +782,14 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
 
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
     std::get<2>(props)->GetObject<Ipv4>()->SetDown(std::get<3>(props));
+
+    // if (auto_mitiagate) {
+    //     // std::get<0>(props)->GetObject<Ipv4>()
+    // }
 }
 
-void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, 
+    uint32_t dst_idx, bool auto_mitiagate) {
     std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = this->getLinkInterfaceIndices(
         src_level, src_idx, dst_level, dst_idx
     );
@@ -774,12 +825,28 @@ void ClosTopology :: doChangeDelay(topology_level src_level, uint32_t src_idx, t
     std::get<2>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<3>(props))->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
 }
 
-void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
-    topology->doDisableLink(src_level, src_idx, dst_level, dst_idx);
+void ClosTopology :: doUpdateWcmp(topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight) {
+    Ptr<Node> node;
+    if (node_level == EDGE)
+        node = this->getEdge(node_idx);
+    else if (node_level == AGGREGATE)
+        node = this->getAggregate(node_idx);
+    else
+        node = this->getCore(node_idx);
+
+    WcmpStaticRoutingHelper wcmp;
+    Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+    wcmp.SetInterfaceWeight(ipv4, interface_idx, level, weight);
 }
 
-void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
-    topology->doEnableLink(src_level, src_idx, dst_level, dst_idx);
+void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, 
+    uint32_t dst_idx, bool auto_mitiagate) {
+    topology->doDisableLink(src_level, src_idx, dst_level, dst_idx, auto_mitiagate);
+}
+
+void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, 
+    uint32_t dst_idx, bool auto_mitiagate) {
+    topology->doEnableLink(src_level, src_idx, dst_level, dst_idx, auto_mitiagate);
 }
 
 void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr) {
@@ -788,6 +855,18 @@ void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t 
 
 void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr) {
     topology->doChangeDelay(src_level, src_idx, dst_level, dst_idx, delayStr);
+}
+
+void updateWcmp(ClosTopology *topology, topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight) {
+    topology->doUpdateWcmp(node_level, node_idx, interface_idx, level, weight);
+}
+
+void migrateTraffic(FlowScheduler *flow_scheduler, uint32_t migration_source, uint32_t migration_destination, int percent) {
+    NS_ASSERT(percent <= 100 && percent >= -100);
+    if (percent > 0) 
+        flow_scheduler->migrateTo(migration_source, migration_destination, (uint8_t) percent);
+    else
+        flow_scheduler->migrateBack(migration_source, migration_destination, (uint8_t) (-percent));
 }
 
 uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
@@ -801,12 +880,31 @@ uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo
      *  - `e` is edge index, in [0, switchRadix/2)
      *  - `s` is server index, in [0, numServers)
      * 
-     * In our WCMP scheme, the level is equal to the pod index.
+     * In this WCMP scheme, the level is equal to the pod index.
     */
     uint32_t ipaddr_val = dest.Get();
     uint8_t *p = (uint8_t *)&ipaddr_val;
 
     return (uint16_t) p[1];
+}
+
+uint16_t torLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params) {
+    /**
+     * Each WCMP switch will maintain multiple tables for each
+     * pod. The pod index can be found by chunking the destination
+     * IP address.
+     * This function thus should just get the ToR index from the dest.
+     * Now, the IP address if of the form `10.p.e.s`, where
+     *  - `p` is the pod num, in [0, numPods)
+     *  - `e` is edge index, in [0, switchRadix/2)
+     *  - `s` is server index, in [0, numServers)
+     * 
+     * In this WCMP scheme, the level is equal to the tor index.
+    */
+    uint32_t ipaddr_val = dest.Get();
+    uint8_t *p = (uint8_t *)&ipaddr_val;
+
+    return (uint16_t) p[1] * topo_params->switchRadix/2 + p[2];
 }
 
 void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
@@ -827,7 +925,7 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     Ptr<Node> ptr;
 
     if ((ptr = topo->getLocalHost(flow->src))) {
-        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));    
+        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
 
         onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
@@ -842,6 +940,14 @@ template<typename... Args> void schedule(double t, link_state_change_func func, 
 }
 
 template<typename... Args> void schedule(double t, link_attribute_change_func func, Args... args) {
+    ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
+}
+
+template<typename... Args> void schedule(double t, wcmp_update_func func, Args... args) {
+    ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
+}
+
+template<typename... Args> void schedule(double t, host_traffic_migration_func func, Args... args) {
     ns3::Simulator::Schedule(ns3::Seconds(t), func, args...);
 }
 
@@ -963,7 +1069,8 @@ int main(int argc, char *argv[]) {
 
     // First, bind our level mapping function for WCMP
     wcmp_level_mapper = [topo_params](Ipv4Address dest) {
-        return podLevelMapper(dest, &topo_params);
+        // return podLevelMapper(dest, &topo_params);
+        return torLevelMapper(dest, &topo_params);
     };
 
     
@@ -990,6 +1097,11 @@ int main(int argc, char *argv[]) {
 
     SWARM_INFO("Total number of servers " << totalNumberOfServers);
 
+    // Setup flow monitor
+    FlowMonitorHelper flowMonitorHelper;
+    if (monitor) {
+        flowMonitorHelper.InstallAll();
+    }
 
     SWARM_INFO("Starting applications");
 
@@ -1014,15 +1126,15 @@ int main(int argc, char *argv[]) {
         flowScheduler = new FlowScheduler(flow_file_path, host_flow_dispatcher_function);
         flowScheduler->begin();
     }
+
+    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
+    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
+    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
+    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
+    // nodes.doChangeBandwidth()
     
     nodes.startApplications(APPLICATION_START_TIME, end);
-
-    // Setup flow monitor
-    Ptr<FlowMonitor> flowMonitor = nullptr;
-    if (monitor) {
-        FlowMonitorHelper flowMonitorHelper;
-        flowMonitor = flowMonitorHelper.InstallAll();
-    }
+    schedule(1.5, disableLink, &nodes, EDGE, 0, AGGREGATE, 0, false);
 
     DoReportProgress(end, flowScheduler);
     
@@ -1036,10 +1148,10 @@ int main(int argc, char *argv[]) {
 
     std::chrono::duration<float> took = t_end - t_start;
 
-    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
-
     if (monitor)
-        flowMonitor->SerializeToXmlFile("swarm-flows.xml", false, false);
+        flowMonitorHelper.GetMonitor()->SerializeToXmlFile("swarm-flows.xml", false, false);
+
+    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
     #if MPI_ENABLED
     MpiInterface::Disable();

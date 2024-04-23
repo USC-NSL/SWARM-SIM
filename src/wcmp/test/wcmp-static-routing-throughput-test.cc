@@ -152,8 +152,8 @@ WcmpStaticRoutingThroughputTest :: emitAtRegularIntervals(Ptr<Node> sender, std:
 void WcmpStaticRoutingThroughputTest :: DoAdjustWeights(Ptr<Node> wcmpNode) {
     WcmpStaticRoutingHelper wcmp;
     Ptr<Ipv4> ipv4 = wcmpNode->GetObject<Ipv4>();
-    wcmp.SetInterfaceWeight(ipv4, 3, 0, 2);
-    wcmp.SetInterfaceWeight(ipv4, 4, 0, 3);
+    wcmp.SetInterfaceWeight(ipv4, 3, 0, 3);
+    wcmp.SetInterfaceWeight(ipv4, 4, 0, 6);
 }
 
 void WcmpStaticRoutingThroughputTest :: AdjustWeightsAt(Ptr<Node> wcmpNode, double when) {
@@ -266,7 +266,7 @@ WcmpStaticRoutingThroughputTest :: DoRun()
 
     PointToPointHelper p2p;
     p2p.SetDeviceAttribute("DataRate", StringValue("1Gbps"));
-    p2p.SetChannelAttribute("Delay", StringValue("55ms"));
+    p2p.SetChannelAttribute("Delay", StringValue("500ms"));
     NetDeviceContainer dAR = p2p.Install(AR);
     NetDeviceContainer dRL1 = p2p.Install(RL1);
     NetDeviceContainer dRL2 = p2p.Install(RL2);

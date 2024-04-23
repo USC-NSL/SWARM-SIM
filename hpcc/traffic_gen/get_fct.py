@@ -16,10 +16,7 @@ import argparse
 import seaborn as sns
 import matplotlib.pyplot as plt
 import xml.etree.cElementTree as ET
-
-
-# Map flow id to `(size, flow_completion_time)`
-fcts = {}
+from typing import List
 
 
 def parse_time_ns(tm: str):
@@ -29,7 +26,8 @@ def parse_time_ns(tm: str):
 
 
 def parse_flow_file(path: str):
-    global fcts
+    # Map flow id to `(size, flow_completion_time)`
+    fcts = {}
 
     context = ET.iterparse(path, events=("start", "end"))
     context = iter(context)
@@ -101,21 +99,34 @@ def parse_flow_file(path: str):
         elem.clear()
     
     print(f"Parsed {len(fcts)} flows")
+    return fcts
 
 
-def plot_cdf():
-    global fcts
+def parse_flow_files(paths: List[str]):
+    all_fcts = [parse_flow_file(path) for path in paths]
+    return all_fcts
 
-    sns.ecdfplot([elem[1] for elem in fcts.values()], stat='proportion')
+
+def plot_cdf(fcts):
+    sns.ecdfplot([1000 * elem[1] for elem in fcts.values()], stat='proportion', log_scale=True)
+
+
+def plot_cdfs(all_fcts, legends):
+    for i in range(len(all_fcts)):
+        plot_cdf(all_fcts[i])
+    plt.legend(legends)
+    plt.ylabel("CDF")
+    plt.xlabel("FCT (ms)")
+    plt.title("Storage Traffic")
     plt.show()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Parse Flow-Monitor XML outputs to get FCTs")
 
-    parser.add_argument('path', help="Path to the Flow-Monitor XML output")
+    parser.add_argument('paths', nargs='+', help="Path(s) to the Flow-Monitor XML output")
 
     args = parser.parse_args()
     
-    parse_flow_file(args.path)
-    plot_cdf()
+    all_fcts = parse_flow_files(args.paths)
+    plot_cdfs(all_fcts, ["Low Load", "Medium Load", "High Load"])

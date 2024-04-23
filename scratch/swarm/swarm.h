@@ -13,9 +13,10 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 0
+#define NETANIM_ENABLED 1
 #endif
 
+#include "common.h"
 #include "flow_scheduler.h"
 
 #include "ns3/core-module.h"
@@ -56,14 +57,6 @@ string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 #endif /* MPI_ENABLED */
 
 /**
- * When using MPI:
- *  - systemId is the rank of the current process
- *  - systemCount is the number of LPs
-*/
-uint32_t systemId = 0;
-uint32_t systemCount = 1;
-
-/**
  * Component name for logging
 */
 const char* COMPONENT_NAME = "SWARMSimulation";
@@ -100,23 +93,6 @@ const uint32_t DEFAULT_NUM_PODS = 2;
 const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 
 /**
- * Links are identified as `(LEVEL_1, i, LEVEL_2, j)` where:
- *  - LEVEL_1 and LEVEL_2 denotes the level of the source and destination interfaces
- *    of this link.
- *  - `i` and `j` are indicees for the switch number in the associated level, starting
- *    from left.
-*/
-typedef enum topology_level_t {
-    EDGE, AGGREGATE, CORE
-} topology_level;
-
-typedef enum swarm_log_level_t {
-    DEBG, INFO,  WARN
-} swarm_log_level;
-
-swarm_log_level current_log_level = INFO;
-
-/**
  * WCMP routing priority.
  * Static routing is 0, so this should be less than that.
 */
@@ -143,54 +119,6 @@ swarm_log_level current_log_level = INFO;
 
 #define QUIET_INTERVAL_LENGTH 1.0
 #define APPLICATION_START_TIME 1.0
-
-/**
- * Logging definitions
- * These are basically NS-3 macros, with the exception
- * that they do not get disabled in the optimized build.
-*/
-#ifndef SWARM_LOG_CONDITION
-#define SWARM_LOG_CONDITION if (systemId == 0)
-#endif
-
-#define SWARM_SET_LOG_LEVEL(level) current_log_level = level
-#define SWARM_LOG_UNCON(msg) std::clog << msg << "\n"
-
-#define SWARM_DEBG_ALL(msg)                                 \
-    do {                                                    \
-        if (current_log_level <= DEBG)                      \
-            SWARM_LOG_UNCON("[DEBG][" << systemId << "] "   \
-                << msg);                                    \
-    } while (false)                                         \
-
-#define SWARM_INFO_ALL(msg)                                 \
-    do {                                                    \
-        if (current_log_level <= INFO)                      \
-            SWARM_LOG_UNCON("[INFO][" << systemId << "] "   \
-                << msg);                                    \
-    } while (false)                                         \
-
-#define SWARM_DEBG(msg)                                     \
-    SWARM_LOG_CONDITION                                     \
-    do {                                                    \
-        if (current_log_level <= DEBG)                      \
-            SWARM_LOG_UNCON("[DEBG] " << msg);              \
-    } while (false)                                         \
-
-#define SWARM_INFO(msg)                                     \
-    SWARM_LOG_CONDITION                                     \
-    do {                                                    \
-        if (current_log_level <= INFO)                      \
-            SWARM_LOG_UNCON("[INFO] " << msg);              \
-    } while (false)                                         \
-
-#define SWARM_WARN(msg)                                     \
-    SWARM_LOG_CONDITION                                     \
-    do {                                                    \
-        if (current_log_level <= WARN)                      \
-            SWARM_LOG_UNCON("[WARN] " << msg);              \
-    } while (false)                                         \
-
 
 /**
  * Drop tail queue max length
@@ -329,10 +257,11 @@ class ClosTopology {
         void doEcmp();
         void enableAggregateBackupPaths();
 
-        void doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
-        void doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+        void doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
+        void doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
         void doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
         void doChangeDelay(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
+        void doUpdateWcmp(topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight);
 
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
@@ -432,7 +361,8 @@ class ClosTopology {
                 if (!ptr)
                     continue;
 
-                ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
+                // ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
+                ns3::PacketSinkHelper sink("ns3::UdpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
                 this->serverApplications[idx].Add(sink.Install(ptr));
             }
         }
@@ -482,7 +412,9 @@ class ClosTopology {
  * does not become a problem.
 */
 typedef void (*link_attribute_change_func)(ClosTopology*, topology_level, uint32_t, topology_level, uint32_t, const string);
-typedef void (*link_state_change_func)(ClosTopology*, topology_level, uint32_t, topology_level, uint32_t);
+typedef void (*link_state_change_func)(ClosTopology*, topology_level, uint32_t, topology_level, uint32_t, bool);
+typedef void (*wcmp_update_func)(ClosTopology*, topology_level, uint32_t, uint32_t, uint16_t, uint16_t);
+typedef void (*host_traffic_migration_func)(FlowScheduler*, uint32_t, uint32_t, int);
 
 /************************************
  * Function declarations
@@ -491,10 +423,13 @@ typedef void (*link_state_change_func)(ClosTopology*, topology_level, uint32_t, 
 void logDescriptors(topolgoy_descriptor *topo_params);
 void changeBandwidth(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
 void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
-void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
-void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitigate=false);
+void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitigate=false);
+void updateWcmp(ClosTopology *topology, topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight);
+void migrateTraffic(FlowScheduler *flow_scheduler, uint32_t migration_source, uint32_t migration_destination, int percent);
 
 uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);
+uint16_t torLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);
 void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo);
 
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args);
