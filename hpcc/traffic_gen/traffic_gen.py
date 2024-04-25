@@ -27,12 +27,13 @@ def translate_bandwidth(b):
 		return None
 	if type(b)!=str:
 		return None
-	if b[-1] == 'G':
+	if b[-1] == 'G':	# Gbps
 		return float(b[:-1])*1e9
-	if b[-1] == 'M':
+	elif b[-1] == 'M':	# Mbps
 		return float(b[:-1])*1e6
-	if b[-1] == 'K':
+	elif b[-1] == 'K':	# Kbps
 		return float(b[:-1])*1e3
+	
 	return float(b)
 
 
@@ -95,8 +96,8 @@ if __name__ == "__main__":
 	customRand = get_cdf_sampler(args.cdf_file)
 
 	# generate flows
-	avg = customRand.get_avg()
-	avg_inter_arrival = 1/(bandwidth*load/8./avg)*1000000000
+	avg = (customRand.get_avg() * 8)		# Average is in bytes!
+	avg_inter_arrival = (avg / (bandwidth * load)) * 1e9
 	n_flow_estimate = int(time / avg_inter_arrival * nhost)
 	n_flow = 0
 

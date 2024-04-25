@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "scenario_parser.h"
@@ -377,8 +377,7 @@ class ClosTopology {
                 if (!ptr)
                     continue;
 
-                // ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
-                ns3::PacketSinkHelper sink("ns3::UdpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
+                ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
                 this->serverApplications[idx].Add(sink.Install(ptr));
             }
         }

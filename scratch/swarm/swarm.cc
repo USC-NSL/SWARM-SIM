@@ -1087,7 +1087,7 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     if ((ptr = topo->getLocalHost(flow->src))) {
         OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
 
-        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
+        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1000]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
         onOffClient.SetAttribute("MaxBytes", UintegerValue(flow->size));
@@ -1228,15 +1228,13 @@ int main(int argc, char *argv[]) {
     cmd.Parse(argc, argv);
 
     #if MPI_ENABLED
-    systemId = MpiInterface::GetSystemId();
-    systemCount = MpiInterface::GetSize();
-
     if (topo_params.mpi) {
         // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
         GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
         MpiInterface::Enable(&argc, &argv);
 
-        SWARM_INFO("Number of logical processes = " << systemCount);
+        systemId = MpiInterface::GetSystemId();
+        systemCount = MpiInterface::GetSize();
     }
     #endif /* MPI_ENABLED */
 
