@@ -55,7 +55,7 @@ WcmpWeights :: set_ipv4(Ptr<Ipv4> ipv4) {
 
 Ipv4RoutingTableEntry* 
 WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val, uint16_t level) {
-    printWeights();
+    // printWeights();
     // Loop and get the total weight of active interfaces
     uint32_t sum = 0;
     uint32_t if_index;

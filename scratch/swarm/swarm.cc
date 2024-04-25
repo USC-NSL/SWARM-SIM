@@ -558,11 +558,15 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
      * happen:
      *  - All edges in the same pod as e_i, should set the sending weight of e_i
      *    that points to a_j to zero.
-     *  - All aggregations in other pods, should point the sending weight of e_i
-     *    that points to all core routers serving a_j to zero.
+     *  - All edges in other pods, should point the sending weight of e_i
+     *    that points to all aggregatation routers that are peers with a_j to zero.
      * 
      * The set of core routers serving a_j is easily found from its index, if it is
      * even, then its the even cores and if its odd, its the odd ones. 
+     * 
+     * Note: The peer of an aggregation router is any other aggregation router that
+     * connects to the same set of cores. For a Clos topology, that just means that 
+     * their indices have the same even/odd parity.
     */
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
     uint32_t ei_pod_num = this->getPodNum(ei);
@@ -580,27 +584,27 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
         doUpdateWcmp(EDGE, ek, std::get<1>(props), ei, weight);
     }
 
-    // Update the aggregations in other pods
-    bool isEven = aj % 2 ? false : true;
-    uint32_t node_idx;
-    uint32_t core_base_idx = isEven ? 0 : numAggAndEdgeeSwitchesPerPod;
+    // Update the edges in other pods
+    uint32_t node_idx_edge, node_idx_agg;
     
     for (uint32_t pod_num = 0; pod_num < numAggAndEdgeeSwitchesPerPod; pod_num++) {
         if (pod_num == ei_pod_num)
             continue;
         
-        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
-            node_idx = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
-            if ((node_idx % 2) != (aj % 2))
-                continue;
-            
-            for (uint32_t k = 0; k < numAggAndEdgeeSwitchesPerPod; k++) {
-                std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
-                    this->getLinkInterfaceIndices(AGGREGATE, node_idx, CORE, core_base_idx + k);
+        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
+            node_idx_edge = pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx;
+            for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+                node_idx_agg = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
 
-                SWARM_INFO("Setting WCMP weight on node AGGREGATE " << node_idx << " with interface " << std::get<1>(props) <<
+                if ((node_idx_agg % 2) != (aj % 2))
+                    continue;
+
+                std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
+                    this->getLinkInterfaceIndices(EDGE, node_idx_edge, AGGREGATE, node_idx_agg);
+
+                SWARM_INFO("Setting WCMP weight on node EDGE " << node_idx_edge << " with interface " << std::get<1>(props) <<
                     " on level " << ei << " to " << weight);
-                doUpdateWcmp(AGGREGATE, node_idx, std::get<1>(props), ei, weight);
+                doUpdateWcmp(EDGE, node_idx_edge, std::get<1>(props), ei, weight);
             }
         }
     }
@@ -665,10 +669,38 @@ void ClosTopology :: mitigateLinkUp(topology_level src_level, uint32_t src_idx, 
     if (src_level == EDGE) {
         NS_ASSERT(dst_level == AGGREGATE);
         mitigateEdgeToAggregateLinkUp(src_idx, dst_idx);
+        restoreStaticRoutesAggregate(dst_idx);
     }
-    else {
+    else if (src_level == AGGREGATE) {
         NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
         mitigateAggregateToCoreLinkUp(src_idx, dst_idx);
+        restoreStaticRoutesCore(dst_idx);
+    }
+}
+
+void ClosTopology :: restoreStaticRoutesAggregate(uint32_t agg_idx) {
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    Ipv4StaticRoutingHelper staticHelper;
+    Ptr<Ipv4StaticRouting> staticRouter;
+    
+    char buf[17];
+    staticRouter = staticHelper.GetStaticRouting(this->getAggregate(agg_idx)->GetObject<Ipv4>());
+    for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
+        snprintf(buf, 17, "10.%u.%u.0", (unsigned char) getPodNum(agg_idx), (unsigned char) i);
+        staticRouter->AddNetworkRouteTo(Ipv4Address(buf), Ipv4Mask("/24"), i+1, DIRECT_PATH_METRIC);
+    }
+}
+
+void ClosTopology :: restoreStaticRoutesCore(uint32_t core_idx) {
+    Ipv4StaticRoutingHelper staticHelper;
+    Ptr<Ipv4StaticRouting> routing;
+    char buf[17];
+
+    routing = staticHelper.GetStaticRouting(this->getCore(core_idx)->GetObject<Ipv4>());
+
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        snprintf(buf, 17, "10.%u.0.0", (unsigned char) pod_num);
+        routing->AddNetworkRouteTo(Ipv4Address(buf), Ipv4Mask("/16"), pod_num+1);
     }
 }
 
@@ -873,7 +905,7 @@ std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTop
     }
     else {
         NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
-        SWARM_INFO("dst_idx = " << dst_idx);
+        
         if (src_idx % 2 == 0)
             NS_ASSERT(dst_idx < (this->params.switchRadix / 2));
         else 
@@ -1299,10 +1331,19 @@ int main(int argc, char *argv[]) {
         flowScheduler->begin();
 
     nodes.echoBetweenHosts(0, 4);
+
+    schedule(1.3, disableLink, &nodes, EDGE, 0, AGGREGATE, 0, true);
+    schedule(1.5, enableLink, &nodes, EDGE, 0, AGGREGATE, 0, true);
     
     nodes.startApplications(APPLICATION_START_TIME, end);
 
     DoReportProgress(end, flowScheduler);
+
+    Ptr<OutputStreamWrapper> routingStream =
+        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getAggregate(0), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.4), nodes.getAggregate(0), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.6), nodes.getAggregate(0), routingStream);
     
     auto t_start = std::chrono::system_clock::now();
 

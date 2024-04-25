@@ -263,6 +263,8 @@ class ClosTopology {
         void mitigateAggregateToCoreLink(uint32_t ei, uint32_t aj, uint16_t weight);
         void mitigateAggregateToCoreLinkDown(uint32_t ai, uint32_t cj);
         void mitigateAggregateToCoreLinkUp(uint32_t ai, uint32_t cj);
+        void restoreStaticRoutesAggregate(uint32_t agg_idx);
+        void restoreStaticRoutesCore(uint32_t core_idx);
         
         void mitigateLinkDown(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
         void mitigateLinkUp(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
