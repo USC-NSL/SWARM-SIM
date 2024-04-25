@@ -2,6 +2,7 @@
 #define COMMON_H
 
 #include <stdint.h>
+#include <map>
 
 /**
  * When using MPI:
@@ -21,6 +22,10 @@ uint32_t systemCount = 1;
 typedef enum topology_level_t {
     EDGE, AGGREGATE, CORE
 } topology_level;
+
+static std::unordered_map<std::string, topology_level> const topo_level_str2enum = {
+    {"EDGE", EDGE}, {"AGGREGATE", AGGREGATE}, {"CORE", CORE}
+};
 
 typedef enum swarm_log_level_t {
     DEBG, INFO,  WARN
@@ -73,6 +78,11 @@ swarm_log_level current_log_level = INFO;
     do {                                                    \
         if (current_log_level <= WARN)                      \
             SWARM_LOG_UNCON("[WARN] " << msg);              \
+    } while (false)                                         \
+
+#define SWARM_ERROR(msg)                                    \
+    do {                                                    \
+        SWARM_LOG_UNCON("[EXCP] " << msg);                  \
     } while (false)                                         \
 
 

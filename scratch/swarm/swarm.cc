@@ -551,6 +551,127 @@ void ClosTopology :: enableAggregateBackupPaths() {
     }
 }
 
+void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint16_t weight) {
+    /**
+     * When an edge-aggregate core link (say between e_i and a_j) goes down, 
+     * two sets of mitigations must be done on WCMP to ensure no packet drops 
+     * happen:
+     *  - All edges in the same pod as e_i, should set the sending weight of e_i
+     *    that points to a_j to zero.
+     *  - All aggregations in other pods, should point the sending weight of e_i
+     *    that points to all core routers serving a_j to zero.
+     * 
+     * The set of core routers serving a_j is easily found from its index, if it is
+     * even, then its the even cores and if its odd, its the odd ones. 
+    */
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    uint32_t ei_pod_num = this->getPodNum(ei);
+    NS_ASSERT(ei_pod_num == this->getPodNum(aj));
+
+    // Update the edges in the same pod
+    for (uint32_t k = 0; k < numAggAndEdgeeSwitchesPerPod; k++) {
+        uint32_t ek = ei_pod_num * numAggAndEdgeeSwitchesPerPod + k;
+        if (ek == ei)
+            continue;
+        std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
+            this->getLinkInterfaceIndices(EDGE, ek, AGGREGATE, aj);
+        SWARM_INFO("Setting WCMP weight on node EDGE " << ek << " with interface " << std::get<1>(props) <<
+            " on level " << ei << " to " << weight);
+        doUpdateWcmp(EDGE, ek, std::get<1>(props), ei, weight);
+    }
+
+    // Update the aggregations in other pods
+    bool isEven = aj % 2 ? false : true;
+    uint32_t node_idx;
+    uint32_t core_base_idx = isEven ? 0 : numAggAndEdgeeSwitchesPerPod;
+    
+    for (uint32_t pod_num = 0; pod_num < numAggAndEdgeeSwitchesPerPod; pod_num++) {
+        if (pod_num == ei_pod_num)
+            continue;
+        
+        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+            node_idx = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
+            if ((node_idx % 2) != (aj % 2))
+                continue;
+            
+            for (uint32_t k = 0; k < numAggAndEdgeeSwitchesPerPod; k++) {
+                std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
+                    this->getLinkInterfaceIndices(AGGREGATE, node_idx, CORE, core_base_idx + k);
+
+                SWARM_INFO("Setting WCMP weight on node AGGREGATE " << node_idx << " with interface " << std::get<1>(props) <<
+                    " on level " << ei << " to " << weight);
+                doUpdateWcmp(AGGREGATE, node_idx, std::get<1>(props), ei, weight);
+            }
+        }
+    }
+}
+
+void ClosTopology :: mitigateEdgeToAggregateLinkDown(uint32_t ei, uint32_t aj) {
+    this->mitigateEdgeToAggregateLink(ei, aj, 0);
+}
+
+void ClosTopology :: mitigateEdgeToAggregateLinkUp(uint32_t ei, uint32_t aj) {
+    this->mitigateEdgeToAggregateLink(ei, aj, 1);
+}
+
+void ClosTopology :: mitigateAggregateToCoreLink(uint32_t ai, uint32_t cj, uint16_t weight) {
+    /**
+     * When an aggregation-core link, say between ai and cj goes down, 
+     * all aggregations in other pods should set the sending weight of 
+     * all edges in the pod of ai that points to cj to 0.
+    */
+
+    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    uint32_t ai_pod_num = this->getPodNum(ai);
+    uint32_t node_idx, edge_idx;
+
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        if (pod_num == ai_pod_num)
+            continue;
+
+        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+            node_idx = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
+            std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
+                this->getLinkInterfaceIndices(AGGREGATE, node_idx, CORE, cj);
+            
+            for (uint32_t k = 0; k < numAggAndEdgeeSwitchesPerPod; k++) {
+                edge_idx = numAggAndEdgeeSwitchesPerPod * ai_pod_num + k;    
+                doUpdateWcmp(AGGREGATE, node_idx, std::get<1>(props), edge_idx, weight);
+            }
+        }
+    }
+}
+
+void ClosTopology :: mitigateAggregateToCoreLinkDown(uint32_t ai, uint32_t cj) {
+    this->mitigateAggregateToCoreLink(ai, cj, 0);
+}
+
+void ClosTopology :: mitigateAggregateToCoreLinkUp(uint32_t ai, uint32_t cj) {
+    this->mitigateAggregateToCoreLink(ai, cj, 1);
+}
+
+void ClosTopology :: mitigateLinkDown(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+    if (src_level == EDGE) {
+        NS_ASSERT(dst_level == AGGREGATE);
+        mitigateEdgeToAggregateLinkDown(src_idx, dst_idx);
+    }
+    else {
+        NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
+        mitigateAggregateToCoreLinkDown(src_idx, dst_idx);
+    }
+}
+
+void ClosTopology :: mitigateLinkUp(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) {
+    if (src_level == EDGE) {
+        NS_ASSERT(dst_level == AGGREGATE);
+        mitigateEdgeToAggregateLinkUp(src_idx, dst_idx);
+    }
+    else {
+        NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
+        mitigateAggregateToCoreLinkUp(src_idx, dst_idx);
+    }
+}
+
 #if NETANIM_ENABLED
 
 // typedef struct color_t {
@@ -752,11 +873,11 @@ std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTop
     }
     else {
         NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
-        
+        SWARM_INFO("dst_idx = " << dst_idx);
         if (src_idx % 2 == 0)
-            NS_ASSERT(dst_idx < this->params.switchRadix / 2);
+            NS_ASSERT(dst_idx < (this->params.switchRadix / 2));
         else 
-            NS_ASSERT(dst_idx >= this->params.switchRadix / 2);
+            NS_ASSERT(dst_idx >= (this->params.switchRadix / 2));
 
         std::pair<uint32_t, uint32_t> pair_src = this->getPodAndIndex(src_idx);
         src_if_idx = this->params.switchRadix / 2 + dst_idx + 1;
@@ -783,9 +904,9 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
     std::get<2>(props)->GetObject<Ipv4>()->SetDown(std::get<3>(props));
 
-    // if (auto_mitiagate) {
-    //     // std::get<0>(props)->GetObject<Ipv4>()
-    // }
+    if (auto_mitiagate) {
+        mitigateLinkDown(src_level, src_idx, dst_level, dst_idx);
+    }
 }
 
 void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, 
@@ -799,6 +920,10 @@ void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, to
 
     std::get<0>(props)->GetObject<Ipv4>()->SetUp(std::get<1>(props));
     std::get<2>(props)->GetObject<Ipv4>()->SetUp(std::get<3>(props));
+
+    if (auto_mitiagate) {
+        mitigateLinkUp(src_level, src_idx, dst_level, dst_idx);
+    }
 }
 
 void ClosTopology :: doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr) {
@@ -1006,11 +1131,24 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
 
+void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *funcs) {
+    funcs->link_down_func = disableLink;
+    funcs->link_up_func = enableLink;
+    funcs->set_bw_func = changeBandwidth;
+    funcs->set_delay_func = changeDelay;
+    funcs->set_wcmp_func = updateWcmp;
+    funcs->migrate_func = migrateTraffic;
+}
+
 int main(int argc, char *argv[]) {
     topolgoy_descriptor topo_params;
+    
     double end = 4.0;
+    
     std::string flow_file_path = "";
+    std::string scneario_file_path = "";
     std::string screamRate = "";
+
     bool micro = false;
     bool verbose = false;
     bool monitor = false;
@@ -1018,18 +1156,54 @@ int main(int argc, char *argv[]) {
     SWARM_SET_LOG_LEVEL(INFO);
 
     CommandLine cmd(__FILE__);
-    cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
-    cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params.linkDelay);
+    // Clos Topology parameters
+    cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
     cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
     cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
-    cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
+
+    // Link parameters
+    cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
+    cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params.linkDelay);
+
+    // Routing options
     cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params.enableEdgeBounceBackup);
+
+    // Inputs
+    cmd.AddValue("scenario", "Path of the scenario file", scneario_file_path);
     cmd.AddValue("flow", "Path of the flow file", flow_file_path);
-    cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", screamRate);
-    cmd.AddValue("end", "When to end simulation", end);
-    cmd.AddValue("micro", "Set time resolution to micro-seconds", micro);
-    cmd.AddValue("verbose", "Enable debug log outputs", verbose);
+
+    // Simulation options
     cmd.AddValue("monitor", "Install FlowMonitor on the network", monitor);
+    cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", screamRate);
+    cmd.AddValue("micro", "Set time resolution to micro-seconds", micro);
+    
+    #if MPI_ENABLED
+    cmd.AddValue("mpi", "Enable MPI", topo_params.mpi);
+    #endif /* MPI_ENABLED */
+
+    #if NETANIM_ENABLED
+    cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
+    #endif /* NETANIM_ENABLED */
+
+    cmd.AddValue("end", "When to end simulation", end);
+
+    // Logging options
+    cmd.AddValue("verbose", "Enable debug log outputs", verbose);
+
+    cmd.Parse(argc, argv);
+
+    #if MPI_ENABLED
+    systemId = MpiInterface::GetSystemId();
+    systemCount = MpiInterface::GetSize();
+
+    if (topo_params.mpi) {
+        // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
+        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+        MpiInterface::Enable(&argc, &argv);
+
+        SWARM_INFO("Number of logical processes = " << systemCount);
+    }
+    #endif /* MPI_ENABLED */
 
     if (micro)
         Time::SetResolution(Time::US);
@@ -1039,33 +1213,15 @@ int main(int argc, char *argv[]) {
     if (verbose)
         SWARM_SET_LOG_LEVEL(DEBG);
 
-    #if NETANIM_ENABLED
-    cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
-    #endif /* NETANIM_ENABLED */
-
-    #if MPI_ENABLED
-    cmd.AddValue("mpi", "Enable MPI", topo_params.mpi);
-    #endif /* MPI_ENABLED */
-
-    cmd.Parse(argc, argv);
-
-    #if MPI_ENABLED
-    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
-    GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
-    MpiInterface::Enable(&argc, &argv);
-
-    systemId = MpiInterface::GetSystemId();
-    systemCount = MpiInterface::GetSize();
-
-    SWARM_INFO("Number of logical processes = " << systemCount);
-    #endif /* MPI_ENABLED */
-
     logDescriptors(&topo_params);
 
     if (!monitor)
         SWARM_WARN("Flow monitoring is DISABLED");
     
     SWARM_INFO("Creating SWARM topology");
+    uint32_t totalNumberOfServers = topo_params.numPods * topo_params.switchRadix * topo_params.numServers / 2;
+    SWARM_INFO("Total number of servers " << totalNumberOfServers);
+
 
     // First, bind our level mapping function for WCMP
     wcmp_level_mapper = [topo_params](Ipv4Address dest) {
@@ -1073,7 +1229,7 @@ int main(int argc, char *argv[]) {
         return torLevelMapper(dest, &topo_params);
     };
 
-    
+    // Create the topology
     ClosTopology nodes = ClosTopology(topo_params);
     nodes.createTopology();
     nodes.createLinks();
@@ -1093,27 +1249,18 @@ int main(int argc, char *argv[]) {
         nodes.enableAggregateBackupPaths();
     }
 
-    uint32_t totalNumberOfServers = nodes.params.numPods * nodes.params.switchRadix * nodes.params.numServers / 2;
-
-    SWARM_INFO("Total number of servers " << totalNumberOfServers);
-
     // Setup flow monitor
     FlowMonitorHelper flowMonitorHelper;
     if (monitor) {
+        SWARM_INFO("Installing Flow Monitor on all nodes");
         flowMonitorHelper.InstallAll();
-    }
-
-    SWARM_INFO("Starting applications");
-
-    // Do constant all-to-all stream if needed
-    if (screamRate.length()) {
-        SWARM_INFO("Doing all-to-all TCP scream with a rate of " << screamRate);
-        nodes.doAllToAllTcp(totalNumberOfServers, screamRate);
     }
 
     // Get the flow file
     FlowScheduler *flowScheduler = nullptr;
     if (flow_file_path.length()) {
+        SWARM_INFO("Scheduling flows on network from " << flow_file_path);
+
         // Bind the flow dispatcher function
         host_flow_dispatcher_function = [nodes](host_flow *flow) {
             return closHostFlowDispatcher(flow, &nodes);
@@ -1124,17 +1271,36 @@ int main(int argc, char *argv[]) {
 
         // Create the flow scheduler
         flowScheduler = new FlowScheduler(flow_file_path, host_flow_dispatcher_function);
-        flowScheduler->begin();
     }
 
-    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
-    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
-    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
-    nodes.bidirectionalCbrBetweenHosts(0, 5, "10kbps");
-    // nodes.doChangeBandwidth()
+    // Bind scenario functions and get the file
+    scenario_functions<ClosTopology, FlowScheduler> funcs;
+    if (scneario_file_path.length()) {
+        SWARM_INFO("Using scenarios specified in " << scneario_file_path);
+
+        bindScenarioFunctions(&funcs);
+        if (
+            parseSecnarioScript<ClosTopology, FlowScheduler>(
+                scneario_file_path, &nodes, flowScheduler, &funcs
+        ))
+        {
+            NS_ABORT_MSG("Scenario file could not be parsed, aborting");
+        }
+    }
+    
+    // Do constant all-to-all stream if needed
+    if (screamRate.length()) {
+        SWARM_INFO("Doing all-to-all TCP scream with a rate of " << screamRate);
+        nodes.doAllToAllTcp(totalNumberOfServers, screamRate);
+    }
+
+    SWARM_INFO("Starting applications");
+    if (flowScheduler)
+        flowScheduler->begin();
+
+    nodes.echoBetweenHosts(0, 4);
     
     nodes.startApplications(APPLICATION_START_TIME, end);
-    schedule(1.5, disableLink, &nodes, EDGE, 0, AGGREGATE, 0, false);
 
     DoReportProgress(end, flowScheduler);
     
@@ -1147,14 +1313,16 @@ int main(int argc, char *argv[]) {
     auto t_end = std::chrono::system_clock::now();
 
     std::chrono::duration<float> took = t_end - t_start;
+    SWARM_INFO("Run finished! Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
-    if (monitor)
+    if (monitor) {
+        SWARM_INFO("Serializing FCT information into swarm-flows.xml");
         flowMonitorHelper.GetMonitor()->SerializeToXmlFile("swarm-flows.xml", false, false);
-
-    SWARM_INFO("Run finished. Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
+    }
 
     #if MPI_ENABLED
-    MpiInterface::Disable();
+    if (topo_params.mpi)
+        MpiInterface::Disable();
     #endif
 
     return 0;

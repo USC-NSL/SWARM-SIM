@@ -90,6 +90,11 @@ class WcmpWeights {
          * If the interface exists, this does nothing.
         */
         void add_interface(uint32_t if_index, uint16_t weight = (uint16_t) 1);
+
+        /**
+         * A debug function to see if things look right
+        */
+        void printWeights();
 };
 
 } // Namespace wcmp

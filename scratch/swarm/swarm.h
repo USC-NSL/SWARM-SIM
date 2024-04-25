@@ -16,7 +16,7 @@
 #define NETANIM_ENABLED 1
 #endif
 
-#include "common.h"
+#include "scenario_parser.h"
 #include "flow_scheduler.h"
 
 #include "ns3/core-module.h"
@@ -257,6 +257,16 @@ class ClosTopology {
         void doEcmp();
         void enableAggregateBackupPaths();
 
+        void mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint16_t weight);
+        void mitigateEdgeToAggregateLinkDown(uint32_t ei, uint32_t aj);
+        void mitigateEdgeToAggregateLinkUp(uint32_t ei, uint32_t aj);
+        void mitigateAggregateToCoreLink(uint32_t ei, uint32_t aj, uint16_t weight);
+        void mitigateAggregateToCoreLinkDown(uint32_t ai, uint32_t cj);
+        void mitigateAggregateToCoreLinkUp(uint32_t ai, uint32_t cj);
+        
+        void mitigateLinkDown(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+        void mitigateLinkUp(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
+
         void doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
         void doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
         void doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
@@ -349,6 +359,10 @@ class ClosTopology {
             return getHost(host_idx);
         }
 
+        uint32_t getPodNum(uint32_t full_idx) {
+            return full_idx / (this->params.switchRadix / 2);
+        }
+
         pair<uint32_t, uint32_t> getPodAndIndex(uint32_t full_idx) const {
             uint32_t idx = full_idx % (this->params.switchRadix / 2);
             uint32_t pod_num = full_idx / (this->params.switchRadix / 2);
@@ -438,5 +452,7 @@ template<typename... Args> void schedule(double t, link_attribute_change_func fu
 void reportTimeProgress(double end);
 void reportFlowProgress(FlowScheduler *flowSCheduler);
 void DoReportProgress(double end, FlowScheduler *flowSCheduler);
+
+void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *funcs);
 
 #endif /* SWARM_H */
