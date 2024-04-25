@@ -635,6 +635,9 @@ void ClosTopology :: mitigateAggregateToCoreLink(uint32_t ai, uint32_t cj, uint1
 
         for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
             node_idx = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
+            if ((node_idx % 2) != (ai % 2))
+                continue;
+
             std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
                 this->getLinkInterfaceIndices(AGGREGATE, node_idx, CORE, cj);
             
@@ -1329,21 +1332,10 @@ int main(int argc, char *argv[]) {
     SWARM_INFO("Starting applications");
     if (flowScheduler)
         flowScheduler->begin();
-
-    nodes.echoBetweenHosts(0, 4);
-
-    schedule(1.3, disableLink, &nodes, EDGE, 0, AGGREGATE, 0, true);
-    schedule(1.5, enableLink, &nodes, EDGE, 0, AGGREGATE, 0, true);
     
     nodes.startApplications(APPLICATION_START_TIME, end);
 
     DoReportProgress(end, flowScheduler);
-
-    Ptr<OutputStreamWrapper> routingStream =
-        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getAggregate(0), routingStream);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.4), nodes.getAggregate(0), routingStream);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.6), nodes.getAggregate(0), routingStream);
     
     auto t_start = std::chrono::system_clock::now();
 
