@@ -41,19 +41,19 @@ done
 shift "$((OPTIND-1))"
 
 echo "Installing basic NS-3 dependencies"
-sudo apt install g++ python3 python3-dev python3-pip pkg-config sqlite3 cmake make
+sudo apt install -y g++ python3 python3-dev python3-pip pkg-config sqlite3 cmake make rsync
 
 if [ $m_flag = 1 ]; then
   echo "Installing MPI dependencies"
-  sudo apt install openmpi-bin openmpi-common openmpi-doc libopenmpi-dev
+  sudo apt install -y openmpi-bin openmpi-common openmpi-doc libopenmpi-dev
 fi
 
 if [ $d_flag = 1 ]; then
   echo "Installing debugging dependencies"
-  sudo apt install gdb valgrind tcpdump
+  sudo apt install -y gdb valgrind tcpdump
 fi
 
 if [ $n_flag = 1 ]; then
   echo "Installing NetAnim dependencies"
-  sudo apt install qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
+  sudo apt install -y qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools
 fi

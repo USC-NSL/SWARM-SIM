@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 0
+#define NETANIM_ENABLED 1
 #endif
 
 #include "scenario_parser.h"
@@ -36,9 +36,10 @@ using namespace std;
 #include "ns3/mobility-helper.h"
 
 /**
- * Animation file output
+ * File outputs
 */
 string ANIM_FILE_OUTPUT = "swarm-anim.xml";
+string FLOW_FILE_OUTPUT = "swarm-flow.xml";
 
 /**
  * Some constants for animation file outputs
@@ -112,6 +113,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
+#define TCP_PACKET_SIZE 1440
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
@@ -379,6 +381,7 @@ class ClosTopology {
 
                 ns3::PacketSinkHelper sink("ns3::TcpSocketFactory", ns3::InetSocketAddress(this->getServerAddress(idx), TCP_DISCARD_PORT));
                 this->serverApplications[idx].Add(sink.Install(ptr));
+                this->serverApplications[idx].Start(ns3::Seconds(0));
             }
         }
 
@@ -411,6 +414,15 @@ class ClosTopology {
         void addHostToPortMap(uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
             uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
             addHostToPortMap(host_idx);
+        }
+
+        /**
+         * PCAP is the only way to consistently monitor packet data
+         * when using MPI. We generate a single PCAP file for all the
+         * devices attached to a server.
+        */
+        void enablePcapOnServers() {
+            NS_ASSERT(MPI_ENABLED && this->params.mpi);   
         }
 };
 

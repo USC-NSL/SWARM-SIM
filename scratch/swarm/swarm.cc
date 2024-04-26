@@ -35,7 +35,7 @@ ClosTopology :: ClosTopology(const topology_descriptor_t m_params) {
 
 #if MPI_ENABLED
 void ClosTopology :: createCoreMPI() {
-    if (systemCount == 1) {
+    if (!this->params.mpi) {
         this->coreSwitchesEven.Create(this->params.switchRadix / 2);
         this->coreSwitchesOdd.Create(this->params.switchRadix / 2);
         return;
@@ -759,7 +759,15 @@ void ClosTopology :: setNodeCoordinates() {
     }
 
     // Create animation interface
+    #if MPI_ENABLED
+    if (this->params.mpi) {
+        NS_ABORT_MSG("NetAnim cannot be used with MPI with its current implementation");
+    }
+    else 
+        this->anim = new AnimationInterface(ANIM_FILE_OUTPUT);
+    #else
     this->anim = new AnimationInterface(ANIM_FILE_OUTPUT);
+    #endif
 
     // Core switches
     Ptr<Node> node;
@@ -820,15 +828,21 @@ void ClosTopology :: setNodeCoordinates() {
 #endif /* NETANIM_ENABLED */
 
 void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval) {
-    UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
-    UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
-
-    echoClient.SetAttribute("MaxPackets", UintegerValue(100));
-    echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
-    echoClient.SetAttribute("PacketSize", UintegerValue(64));
+    Ptr<Node> ptr;
     
-    this->serverApplications[server_host].Add(echoServer.Install(this->getHost(server_host)));
-    this->serverApplications[client_host].Add(echoClient.Install(this->getHost(client_host)));
+    if ((ptr = this->getLocalHost(server_host))) {
+        UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
+        this->serverApplications[server_host].Add(echoServer.Install(ptr));
+    }
+
+    if ((ptr = this->getLocalHost(client_host))) {
+        UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
+        echoClient.SetAttribute("MaxPackets", UintegerValue(100));
+        echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
+        echoClient.SetAttribute("PacketSize", UintegerValue(64));
+        
+        this->serverApplications[client_host].Add(echoClient.Install(ptr));
+    }
 }
 
 void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
@@ -1087,9 +1101,10 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     if ((ptr = topo->getLocalHost(flow->src))) {
         OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
 
-        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1000]"));
+        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
+        onOffClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
         onOffClient.SetAttribute("MaxBytes", UintegerValue(flow->size));
         onOffClient.Install(ptr).Start(Time(0));
     }
@@ -1285,8 +1300,19 @@ int main(int argc, char *argv[]) {
     // Setup flow monitor
     FlowMonitorHelper flowMonitorHelper;
     if (monitor) {
-        SWARM_INFO("Installing Flow Monitor on all nodes");
-        flowMonitorHelper.InstallAll();
+        #if MPI_ENABLED
+        if (topo_params.mpi)
+            NS_ABORT_MSG("Not implemented");
+        else {
+            SWARM_INFO("Installing Flow Monitor on all servers");
+            for (uint32_t i = 0; i < totalNumberOfServers; i++)
+                flowMonitorHelper.Install(nodes.getHost(i));    
+        }
+        #else
+        SWARM_INFO("Installing Flow Monitor on all servers");
+        for (uint32_t i = 0; i < totalNumberOfServers; i++)
+            flowMonitorHelper.Install(nodes.getHost(i));
+        #endif
     }
 
     // Get the flow file
@@ -1331,7 +1357,7 @@ int main(int argc, char *argv[]) {
     if (flowScheduler)
         flowScheduler->begin();
     
-    nodes.startApplications(APPLICATION_START_TIME, end);
+    // nodes.startApplications(APPLICATION_START_TIME, end);
 
     DoReportProgress(end, flowScheduler);
     
@@ -1347,8 +1373,16 @@ int main(int argc, char *argv[]) {
     SWARM_INFO("Run finished! Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
     if (monitor) {
-        SWARM_INFO("Serializing FCT information into swarm-flows.xml");
-        flowMonitorHelper.GetMonitor()->SerializeToXmlFile("swarm-flows.xml", false, false);
+        #if MPI_ENABLED
+        if (topo_params.mpi)
+            NS_ABORT_MSG("Not implemented");
+        else
+            SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
+            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
+        #else
+        SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
+        flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
+        #endif
     }
 
     #if MPI_ENABLED
