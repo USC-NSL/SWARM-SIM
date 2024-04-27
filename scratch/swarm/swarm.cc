@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include "swarm.h"
 #include "ns3/flow-monitor-helper.h"
+#include "ns3/ipv4-flow-probe.h"
 
 
 using namespace ns3;
@@ -1105,8 +1106,8 @@ int main(int argc, char *argv[]) {
     SWARM_SET_LOG_LEVEL(INFO);
     // SWARM_SET_LOG_LEVEL(WARN);
     // LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_ALL);
-    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
     // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
     // LogComponentEnable("WcmpStaticRouting", LOG_LEVEL_ALL);
 
     CommandLine cmd(__FILE__);
@@ -1217,18 +1218,17 @@ int main(int argc, char *argv[]) {
         //     flowMonitorHelper.InstallAll();
         // // }
         // #else
+        
+        #if MPI_ENABLED
+        NS_OBJECT_ENSURE_REGISTERED(Ipv4FlowProbeTag);
+        #endif
+
         Ptr<Node> ptr;
         SWARM_INFO("Installing Flow Monitor on all local servers");
         for (uint32_t i = 0; i < totalNumberOfServers; i++) {
             if ((ptr = nodes.getLocalHost(i)))
                 flowMonitorHelper.Install(ptr);
         }
-
-        // #if MPI_ENABLED
-        // if (topo_params.mpi)
-        //     std::this_thread::sleep_for(5s);
-        // #endif
-        // #endif
     }
 
     // Get the flow file
@@ -1269,13 +1269,15 @@ int main(int argc, char *argv[]) {
         nodes.doAllToAllTcp(totalNumberOfServers, screamRate);
     }
 
+    nodes.echoBetweenHosts(0, 4);
+
     SWARM_INFO("Starting applications");
     if (flowScheduler)
         flowScheduler->begin();
 
     nodes.startApplications(APPLICATION_START_TIME, end);
 
-    DoReportProgress(end, flowScheduler);
+    // DoReportProgress(end, flowScheduler);
     
     auto t_start = std::chrono::system_clock::now();
 
@@ -1295,19 +1297,19 @@ int main(int argc, char *argv[]) {
     SWARM_INFO("Run finished! Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
     if (monitor) {
-        // #if MPI_ENABLED
-        // if (!topo_params.mpi) {
-        //     SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
-        //     flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        // }
-        // else {
-        //     SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
-        //     flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
-        // }
-        // #else
+        #if MPI_ENABLED
+        if (!topo_params.mpi) {
+            SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
+            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
+        }
+        else {
+            SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
+            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
+        }
+        #else
         SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
         flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        // #endif
+        #endif
     }
 
     #if MPI_ENABLED
