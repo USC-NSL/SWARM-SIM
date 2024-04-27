@@ -1,4 +1,5 @@
 #include <chrono>
+#include <thread>
 #include <sys/stat.h>
 #include "swarm.h"
 #include "ns3/flow-monitor-helper.h"
@@ -36,20 +37,15 @@ ClosTopology :: ClosTopology(const topology_descriptor_t m_params) {
 
 #if MPI_ENABLED
 void ClosTopology :: createCoreMPI() {
+    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
     if (!this->params.mpi) {
-        this->coreSwitchesEven.Create(this->params.switchRadix / 2);
-        this->coreSwitchesOdd.Create(this->params.switchRadix / 2);
+        this->coreSwitches.Create(numCores);
         return;
     }
 
-    // The EVEN cores will get even systemIDs
-    for (uint32_t i = 0; i < this->params.switchRadix / 2; i++) {
-        this->coreSwitchesEven.Add(CreateObject<Node>((i % (systemCount / 2) * 2)));
-    }
-
-    // ODDs get odd systemIDs
-    for (uint32_t i = 0; i < this->params.switchRadix / 2; i++) {
-        this->coreSwitchesOdd.Add(CreateObject<Node>((i % (systemCount / 2) * 2) + 1));
+    // For MPI, color cores sequentially
+    for (uint32_t i = 0; i < numCores; i++) {
+        this->coreSwitches.Add(CreateObject<Node>(i % systemCount));
     }
 }
 #endif /* MPI_ENABLED */
@@ -77,9 +73,8 @@ void ClosTopology :: createTopology() {
     #if MPI_ENABLED
     this->createCoreMPI();
     #else
-    // We separate the core to an ODD and EVEN part for easier linking
-    this->coreSwitchesEven.Create(this->params.switchRadix / 2);
-    this->coreSwitchesOdd.Create(this->params.switchRadix / 2);
+    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
+    this->coreSwitches.Create(numCores);
     #endif /* MPI_ENABLED */
     
     // We separate aggregate and edges for each pod for easier linking
@@ -94,8 +89,7 @@ void ClosTopology :: createTopology() {
 
     // Install the layer 3 stack
     InternetStackHelper internet;
-    internet.Install(coreSwitchesEven);
-    internet.Install(coreSwitchesOdd);
+    internet.Install(coreSwitches);
     for (uint32_t i = 0; i < this->params.numPods; i++) {
         for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
             internet.Install(this->servers[i * numAggAndEdgeeSwitchesPerPod + j]);
@@ -130,23 +124,16 @@ void ClosTopology :: createLinks() {
         }
     }
 
-    // Aggregate to Core links
+    // Aggregate to Core links, each agggregate links to the core within r/2 steps
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
             for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
                 NodeContainer p2pContainer;
 
                 src = pod_num * (numAggAndEdgeeSwitchesPerPod) + i;
+                dst = i + numAggAndEdgeeSwitchesPerPod * j;
                 p2pContainer.Add(this->aggSwitches[pod_num].Get(i));
-
-                if (src % 2 == 0) {
-                    dst = j;
-                    p2pContainer.Add(this->coreSwitchesEven.Get(j));
-                }
-                else {
-                    dst = j + this->params.switchRadix / 2;
-                    p2pContainer.Add(this->coreSwitchesOdd.Get(j));
-                }
+                p2pContainer.Add(this->coreSwitches.Get(dst));
 
                 this->aggToCoreLinks[std::make_tuple(src, dst)] = p2p.Install(p2pContainer);
             }
@@ -212,121 +199,6 @@ void ClosTopology :: connectServers() {
     }
 }
 
-void ClosTopology :: assignIpsNaive() {
-    /**
-     * This just makes a little LAN for each link in the network
-     * Results in an unnecessarily big routing table, but that may not matter in 
-     * this simulation.
-    */
-    
-    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
-    Ipv4AddressHelper ipv4;
-
-    // First, Edge to Agg
-    ipv4.SetBase(naiveIpv4AddressBase, naiveIpv4AddressMask);
-
-    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
-        NetDeviceContainer currentDevices;
-        for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
-            for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
-                ipv4.Assign(this->edgeToAggLinks[std::make_tuple(
-                    pod_num * numAggAndEdgeeSwitchesPerPod + i,
-                    pod_num * numAggAndEdgeeSwitchesPerPod + j
-                )]);
-                ipv4.NewNetwork();
-            }
-        }
-    }
-
-    // Now Core
-    for (auto const& map_elem : this->aggToCoreLinks) {
-        ipv4.Assign(map_elem.second);
-        ipv4.NewNetwork();
-    }
-
-    ipv4.SetBase(serverIpv4AddressBase, serverIpv4AddressMask);
-
-    // Finally, Server to Edge link IPs
-    uint32_t switch_idx, server_idx;
-    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
-        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
-            switch_idx = pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx;
-            Ipv4InterfaceContainer hostInterfaces;
-            for (uint32_t i = 0; i < this->params.numServers; i++) {
-                server_idx = switch_idx * this->params.numServers + i;
-                hostInterfaces.Add(ipv4.Assign(this->serverToEdgeLinks[std::make_tuple(switch_idx, server_idx)]).Get(0));
-                ipv4.NewNetwork();
-            }
-            this->serverInterfaces[switch_idx] = hostInterfaces;
-        }
-    }
-}
-
-void ClosTopology :: assignIpsLan() {
-    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
-    Ipv4AddressHelper ipv4;
-    ipv4.SetBase(lanIpv4AddressBase, lanIpv4AddressMask);
-
-    /**
-     * Each of the following will be its own /24 LAN
-     *  1. Core to Aggregate links
-     *  2. Aggregate to Edge links per pod
-     *  3. Edge to Hosts for per pod, per host
-     * 
-     * This essentially means that:
-     *  - Two servers connected to the same edge, will only use that edge
-     *  - Any communication between any interface in a pod, remains in that pod
-     *  - Any communication between any interface in the core-aggregate region, never enters a pod
-    */
-
-    // Server LANs
-    NetDeviceContainer currentDevices;
-    Ipv4InterfaceContainer currentInterfaces;
-    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
-        for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
-            currentDevices = this->serverDevices[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx];
-            currentInterfaces = ipv4.Assign(currentDevices);
-            ipv4.NewNetwork();
-
-            // Collect the server interfaces for later
-            Ipv4InterfaceContainer hostInterfaces;
-            for (uint32_t i = 0; i < currentInterfaces.GetN(); i++) {
-                if (i % 2 == 0) {
-                    hostInterfaces.Add(currentInterfaces.Get(i));
-                }
-            }
-            this->serverInterfaces[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = hostInterfaces;
-        }
-    }
-
-    // Pod LANs
-    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
-        NetDeviceContainer currentDevices;
-        for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
-            for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
-                currentDevices.Add(this->edgeToAggLinks[std::make_tuple(
-                    pod_num * numAggAndEdgeeSwitchesPerPod + i,
-                    pod_num * numAggAndEdgeeSwitchesPerPod + j
-                )]);
-            }
-        }
-        ipv4.Assign(currentDevices);
-        ipv4.NewNetwork();
-    }
-
-    // Core LAN
-    for (uint32_t core_idx = 0; core_idx < this->params.switchRadix; core_idx++) {
-        NetDeviceContainer currentDevices;
-        for (auto const& map_elem : this->aggToCoreLinks) {
-            if (std::get<1>(map_elem.first) == core_idx) {
-                currentDevices.Add(map_elem.second);
-            }
-            ipv4.Assign(currentDevices);
-            ipv4.NewNetwork();
-        }
-    }
-}
-
 void ClosTopology :: assignServerIps() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
     Ipv4AddressHelper ipv4;
@@ -360,8 +232,8 @@ void ClosTopology :: createFabricInterfaces() {
      *  - EDGES: Interfaces 1 .. n go towards the servers and interfaces n+1 ... n+r/2
      *    go towards the aggregation.
      *  - AGGREGATIONS: Interfaces 1 .. r/2 go towards the edges and r/2+1 .. r go to the core.
-     *  - CORE: Interfaces 1 .. p go towards the aggregations, interleaved between odd and even
-     *    core indices.
+     *  - CORE: Each core gets one link to each pod, specifically to the aggregation with index
+     *    equal to the core index modulo r/2.
     */
 
     // edge-server interfaces
@@ -448,9 +320,10 @@ void ClosTopology :: setupServerRouting() {
 void ClosTopology :: setupCoreRouting() {
     Ipv4StaticRoutingHelper staticHelper;
     Ptr<Ipv4StaticRouting> routing;
+    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
     char buf[17];
 
-    for (uint32_t core_idx = 0; core_idx < this->params.switchRadix; core_idx++) {
+    for (uint32_t core_idx = 0; core_idx < numCores; core_idx++) {
         routing = staticHelper.GetStaticRouting(this->getCore(core_idx)->GetObject<Ipv4>());
 
         for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
@@ -562,13 +435,18 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
      *  - All edges in other pods, should point the sending weight of e_i
      *    that points to all aggregatation routers that are peers with a_j to zero.
      * 
-     * The set of core routers serving a_j is easily found from its index, if it is
-     * even, then its the even cores and if its odd, its the odd ones. 
+     * The set of core routers serving a_j is easily found from its index, if the a_j
+     * index within the pod is a'_j, then core routers serving it will be the set of
+     * cores a'_j + k*r/2 for k = 0, 1, ..., r/2
      * 
      * Note: The peer of an aggregation router is any other aggregation router that
      * connects to the same set of cores. For a Clos topology, that just means that 
-     * their indices have the same even/odd parity.
+     * they have the same index withn the pod, or equivalently, their total indices
+     * are r/2 apart.
     */
+
+    NS_ABORT_MSG("NOT IMPLEMENTED CORRECTLY!!!");
+
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
     uint32_t ei_pod_num = this->getPodNum(ei);
     NS_ASSERT(ei_pod_num == this->getPodNum(aj));
@@ -588,6 +466,7 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
     // Update the edges in other pods
     uint32_t node_idx_edge, node_idx_agg;
     
+    // TODO: This needs serious fixes!!!
     for (uint32_t pod_num = 0; pod_num < numAggAndEdgeeSwitchesPerPod; pod_num++) {
         if (pod_num == ei_pod_num)
             continue;
@@ -749,8 +628,7 @@ void ClosTopology :: setNodeCoordinates() {
     // Set mobility model
     MobilityHelper mobility;
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    mobility.Install(this->coreSwitchesEven);
-    mobility.Install(this->coreSwitchesOdd);
+    mobility.Install(this->coreSwitches);
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         mobility.Install(this->aggSwitches[pod_num]);
         mobility.Install(this->edgeSwitches[pod_num]);
@@ -773,21 +651,16 @@ void ClosTopology :: setNodeCoordinates() {
     // Core switches
     Ptr<Node> node;
     // color color;
+    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
     double x_start = -WIDTH / 2;
-    double delta_x = WIDTH / (this->params.switchRadix - 1);
-    for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
-        node = this->coreSwitchesEven.Get(i);
+    double delta_x = WIDTH / (numCores - 1);
+    for (uint32_t i = 0; i < numCores; i++) {
+        node = this->coreSwitches.Get(i);
         this->anim->SetConstantPosition(node, x_start + i * delta_x, CORE_Y);
         this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
         this->anim->UpdateNodeDescription(node, "CORE-" + std::to_string(i));
 
         // getColor(i%4, &color);
-        // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
-        node = this->coreSwitchesOdd.Get(i);
-        this->anim->SetConstantPosition(node, delta_x / 2 + i * delta_x, CORE_Y);
-        this->anim->UpdateNodeSize(node, NODE_SIZE, NODE_SIZE);
-        this->anim->UpdateNodeDescription(node, "CORE-" + std::to_string(i + numAggAndEdgeeSwitchesPerPod));
-        // getColor(i%4+2, &color);
         // this->anim->UpdateNodeColor(node, color.r, color.g, color.b);
     }
 
@@ -837,6 +710,7 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
     }
 
     if ((ptr = this->getLocalHost(client_host))) {
+        SWARM_INFO("Sending echo request from " << this->getServerAddress(client_host) << " to " << this->getServerAddress(server_host));
         UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
         echoClient.SetAttribute("MaxPackets", UintegerValue(1));
         echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
@@ -1233,6 +1107,7 @@ int main(int argc, char *argv[]) {
     // LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_ALL);
     // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
     // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("WcmpStaticRouting", LOG_LEVEL_ALL);
 
     CommandLine cmd(__FILE__);
     // Clos Topology parameters
@@ -1342,11 +1217,18 @@ int main(int argc, char *argv[]) {
         //     flowMonitorHelper.InstallAll();
         // // }
         // #else
-        SWARM_INFO("Installing Flow Monitor on all servers");
-        for (uint32_t i = 0; i < totalNumberOfServers; i++)
-            flowMonitorHelper.Install(nodes.getHost(i));
+        Ptr<Node> ptr;
+        SWARM_INFO("Installing Flow Monitor on all local servers");
+        for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+            if ((ptr = nodes.getLocalHost(i)))
+                flowMonitorHelper.Install(ptr);
+        }
+
+        // #if MPI_ENABLED
+        // if (topo_params.mpi)
+        //     std::this_thread::sleep_for(5s);
         // #endif
-        // flowMonitorHelper.InstallAll();
+        // #endif
     }
 
     // Get the flow file
@@ -1391,14 +1273,17 @@ int main(int argc, char *argv[]) {
     if (flowScheduler)
         flowScheduler->begin();
 
-    nodes.echoBetweenHosts(0, 4);
-    // nodes.unidirectionalCbrBetweenHosts(0, 4);
-
     nodes.startApplications(APPLICATION_START_TIME, end);
 
     DoReportProgress(end, flowScheduler);
     
     auto t_start = std::chrono::system_clock::now();
+
+    Ptr<OutputStreamWrapper> routingStream =
+        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(1), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(2), routingStream);
 
     Simulator::Stop(Seconds(end + QUIET_INTERVAL_LENGTH));
     Simulator::Run();

@@ -224,7 +224,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     if args.xml:
-        all_fcts = FlowMonitorXmlParser.parse_flow_files(args.paths)
+        all_fcts = FlowMonitorXmlParser.parse_flow_files(args.xml)
         plot_cdfs(all_fcts, "title", ["Low Load", "Medium Load", "High Load"])
 
     if args.pcap:

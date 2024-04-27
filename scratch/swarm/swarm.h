@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 0
+#define NETANIM_ENABLED 1
 #endif
 
 #include "scenario_parser.h"
@@ -203,10 +203,11 @@ host_flow_dispatcher host_flow_dispatcher_function;
 
 class ClosTopology {
     private:
-        // The `Even` container connects to aggregate switches with even index,
-        // The `Odd` container to odd indices.
-        ns3::NodeContainer coreSwitchesEven;
-        ns3::NodeContainer coreSwitchesOdd;
+        // Core switches are fully deployed to make things easier,
+        // so with a switch radix of `r`, each core will have exactly
+        // one link to each pod, so there are at most `r` pods, each 
+        // having r^2/4 uplinks, so we need r^2/4 core switches.
+        ns3::NodeContainer coreSwitches;
 
         // Each container, holds the switches for a specific pod
         vector<ns3::NodeContainer> aggSwitches;
@@ -252,8 +253,6 @@ class ClosTopology {
         void createCoreMPI();
         #endif
         
-        void assignIpsLan();
-        void assignIpsNaive();
         void assignServerIps();
         void createFabricInterfaces();
 
@@ -312,10 +311,7 @@ class ClosTopology {
         }
 
         ns3::Ptr<ns3::Node> getCore(uint32_t idx) {
-            if (idx < (this->params.switchRadix / 2)) {
-                return this->coreSwitchesEven.Get(idx);
-            }
-            return this->coreSwitchesOdd.Get(idx - (this->params.switchRadix / 2));
+            return this->coreSwitches.Get(idx);
         }
 
         ns3::Ptr<ns3::Node> getAggregate(uint32_t pod_num, uint32_t idx) {
