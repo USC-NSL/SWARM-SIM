@@ -1,4 +1,5 @@
 #include <chrono>
+#include <sys/stat.h>
 #include "swarm.h"
 #include "ns3/flow-monitor-helper.h"
 
@@ -837,7 +838,7 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
 
     if ((ptr = this->getLocalHost(client_host))) {
         UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
-        echoClient.SetAttribute("MaxPackets", UintegerValue(100));
+        echoClient.SetAttribute("MaxPackets", UintegerValue(1));
         echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
         echoClient.SetAttribute("PacketSize", UintegerValue(64));
         
@@ -1190,7 +1191,31 @@ void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *func
     funcs->migrate_func = migrateTraffic;
 }
 
+void enablePcap(ClosTopology *topology, uint32_t totalNumberOfServers) {
+    SWARM_INFO_ALL("Enabling PCAP on local server devices");
+    PointToPointHelper p2p;
+    Ptr<Node> ptr;
+
+    struct stat st = {0};
+    if (stat(PCAP_DIR.c_str(), &st) == -1)
+        mkdir(PCAP_DIR.c_str(), 0700);
+
+    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        if (ptr = topology->getHost(i)) {
+            NS_ASSERT(ptr->GetNDevices() == 2);
+            p2p.EnablePcap(
+                getPcapOutputName(i),
+                topology->getHost(i)->GetDevice(1),
+                false, true
+            );
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
+    // First, do global configurations
+    doGlobalConfigs();
+
     topolgoy_descriptor topo_params;
     
     double end = 4.0;
@@ -1204,6 +1229,10 @@ int main(int argc, char *argv[]) {
     bool monitor = false;
 
     SWARM_SET_LOG_LEVEL(INFO);
+    // SWARM_SET_LOG_LEVEL(WARN);
+    // LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_ALL);
+    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
 
     CommandLine cmd(__FILE__);
     // Clos Topology parameters
@@ -1301,13 +1330,17 @@ int main(int argc, char *argv[]) {
     FlowMonitorHelper flowMonitorHelper;
     if (monitor) {
         #if MPI_ENABLED
-        if (topo_params.mpi)
-            NS_ABORT_MSG("Not implemented");
-        else {
+        // if (topo_params.mpi)
+        //     enablePcap(&nodes, totalNumberOfServers);
+        // else {
+            Ptr<Node> ptr;
             SWARM_INFO("Installing Flow Monitor on all servers");
-            for (uint32_t i = 0; i < totalNumberOfServers; i++)
-                flowMonitorHelper.Install(nodes.getHost(i));    
-        }
+            // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+            //     if ((ptr = nodes.getLocalHost(i)))
+            //         flowMonitorHelper.Install(ptr);
+            // }
+            flowMonitorHelper.InstallAll();
+        // }
         #else
         SWARM_INFO("Installing Flow Monitor on all servers");
         for (uint32_t i = 0; i < totalNumberOfServers; i++)
@@ -1356,8 +1389,11 @@ int main(int argc, char *argv[]) {
     SWARM_INFO("Starting applications");
     if (flowScheduler)
         flowScheduler->begin();
-    
-    // nodes.startApplications(APPLICATION_START_TIME, end);
+
+    // nodes.echoBetweenHosts(0, 4);
+    // nodes.unidirectionalCbrBetweenHosts(0, 4);
+
+    nodes.startApplications(APPLICATION_START_TIME, end);
 
     DoReportProgress(end, flowScheduler);
     
@@ -1374,11 +1410,14 @@ int main(int argc, char *argv[]) {
 
     if (monitor) {
         #if MPI_ENABLED
-        if (topo_params.mpi)
-            NS_ABORT_MSG("Not implemented");
-        else
+        if (!topo_params.mpi) {
             SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
             flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
+        }
+        else {
+            SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
+            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
+        }
         #else
         SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
         flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
@@ -1392,5 +1431,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-

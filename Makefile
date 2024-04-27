@@ -67,6 +67,7 @@ clean:
 	@rm -f ns3/*.pcap
 	@rm -f ns3/*.xml
 	@rm -f ns3/*.routes
+	@rm -f ns3/swarm-pcaps/*.pcap
 
 purge: check clean
 	$(info Purging current distribution)

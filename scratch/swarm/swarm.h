@@ -37,9 +37,16 @@ using namespace std;
 
 /**
  * File outputs
+ * 
+ * NOTE: For `PCAP_DIR`, the MakeFeile uses a hard-coded value
+ *       for it, so keep in mind to update it if you change
+ *       the value here.
 */
 string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 string FLOW_FILE_OUTPUT = "swarm-flow.xml";
+string FLOW_FILE_PREFIX = "swarm-flow-";
+string PCAP_DIR = "swarm-pcaps";
+string PCAP_PREFIX = "host-";
 
 /**
  * Some constants for animation file outputs
@@ -415,15 +422,6 @@ class ClosTopology {
             uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
             addHostToPortMap(host_idx);
         }
-
-        /**
-         * PCAP is the only way to consistently monitor packet data
-         * when using MPI. We generate a single PCAP file for all the
-         * devices attached to a server.
-        */
-        void enablePcapOnServers() {
-            NS_ASSERT(MPI_ENABLED && this->params.mpi);   
-        }
 };
 
 /************************************
@@ -467,5 +465,20 @@ void reportFlowProgress(FlowScheduler *flowSCheduler);
 void DoReportProgress(double end, FlowScheduler *flowSCheduler);
 
 void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *funcs);
+
+void doGlobalConfigs() {
+    ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
+}
+
+/**
+ * PCAP is the only way to consistently monitor packet data
+ * when using MPI. We generate a single PCAP file for all the
+ * devices attached to a server.
+*/
+void enablePcap(ClosTopology *topology, uint32_t totalNumberOfServers);
+
+std::string getPcapOutputName(uint32_t i) {
+    return PCAP_DIR + "/" + PCAP_PREFIX + std::to_string(i) + ".pcap";
+}
 
 #endif /* SWARM_H */
