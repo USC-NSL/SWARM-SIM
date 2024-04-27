@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "scenario_parser.h"
@@ -36,6 +36,18 @@ using namespace std;
 #include "ns3/mobility-helper.h"
 
 /**
+ * Some constants for animation file outputs
+*/
+#define CORE_Y 0.0
+#define AGG_Y 100.0
+#define EDGE_Y 200.0
+#define SERVER_Y 250.0
+#define SERVER_DELTA 30.0
+#define WIDTH 600.0
+#define NODE_SIZE 8.0
+#endif /* NETANIM_ENABLED */
+
+/**
  * File outputs
  * 
  * NOTE: For `PCAP_DIR`, the MakeFeile uses a hard-coded value
@@ -47,18 +59,6 @@ string FLOW_FILE_OUTPUT = "swarm-flow.xml";
 string FLOW_FILE_PREFIX = "swarm-flow-";
 string PCAP_DIR = "swarm-pcaps";
 string PCAP_PREFIX = "host-";
-
-/**
- * Some constants for animation file outputs
-*/
-#define CORE_Y 0.0
-#define AGG_Y 100.0
-#define EDGE_Y 200.0
-#define SERVER_Y 250.0
-#define SERVER_DELTA 30.0
-#define WIDTH 600.0
-#define NODE_SIZE 8.0
-#endif /* NETANIM_ENABLED */
 
 #if MPI_ENABLED
 #include "ns3/mpi-module.h"

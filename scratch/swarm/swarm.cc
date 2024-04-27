@@ -1329,23 +1329,24 @@ int main(int argc, char *argv[]) {
     // Setup flow monitor
     FlowMonitorHelper flowMonitorHelper;
     if (monitor) {
-        #if MPI_ENABLED
-        // if (topo_params.mpi)
-        //     enablePcap(&nodes, totalNumberOfServers);
-        // else {
-            Ptr<Node> ptr;
-            SWARM_INFO("Installing Flow Monitor on all servers");
-            // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-            //     if ((ptr = nodes.getLocalHost(i)))
-            //         flowMonitorHelper.Install(ptr);
-            // }
-            flowMonitorHelper.InstallAll();
-        // }
-        #else
+        // #if MPI_ENABLED
+        // // if (topo_params.mpi)
+        // //     enablePcap(&nodes, totalNumberOfServers);
+        // // else {
+        //     Ptr<Node> ptr;
+        //     SWARM_INFO("Installing Flow Monitor on all servers");
+        //     // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        //     //     if ((ptr = nodes.getLocalHost(i)))
+        //     //         flowMonitorHelper.Install(ptr);
+        //     // }
+        //     flowMonitorHelper.InstallAll();
+        // // }
+        // #else
         SWARM_INFO("Installing Flow Monitor on all servers");
         for (uint32_t i = 0; i < totalNumberOfServers; i++)
             flowMonitorHelper.Install(nodes.getHost(i));
-        #endif
+        // #endif
+        // flowMonitorHelper.InstallAll();
     }
 
     // Get the flow file
@@ -1390,7 +1391,7 @@ int main(int argc, char *argv[]) {
     if (flowScheduler)
         flowScheduler->begin();
 
-    // nodes.echoBetweenHosts(0, 4);
+    nodes.echoBetweenHosts(0, 4);
     // nodes.unidirectionalCbrBetweenHosts(0, 4);
 
     nodes.startApplications(APPLICATION_START_TIME, end);
@@ -1409,19 +1410,19 @@ int main(int argc, char *argv[]) {
     SWARM_INFO("Run finished! Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
     if (monitor) {
-        #if MPI_ENABLED
-        if (!topo_params.mpi) {
-            SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
-            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        }
-        else {
-            SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
-            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
-        }
-        #else
+        // #if MPI_ENABLED
+        // if (!topo_params.mpi) {
+        //     SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
+        //     flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
+        // }
+        // else {
+        //     SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
+        //     flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
+        // }
+        // #else
         SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
         flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        #endif
+        // #endif
     }
 
     #if MPI_ENABLED
