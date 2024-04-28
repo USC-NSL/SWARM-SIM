@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 0
+#define NETANIM_ENABLED 1
 #endif
 
 #include "scenario_parser.h"
@@ -282,6 +282,7 @@ class ClosTopology {
         void doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
         void doChangeDelay(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string delayStr);
         void doUpdateWcmp(topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight);
+        void doSetLinkLoss(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string packetLossRate);
 
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
@@ -466,6 +467,7 @@ void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_
 void enableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitigate=false);
 void updateWcmp(ClosTopology *topology, topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight);
 void migrateTraffic(FlowScheduler *flow_scheduler, uint32_t migration_source, uint32_t migration_destination, int percent);
+void setLossRate(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string packetLossRate);
 
 uint16_t podLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);
 uint16_t torLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo_params);

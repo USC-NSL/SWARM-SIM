@@ -434,12 +434,12 @@ void ClosTopology :: enableAggregateBackupPaths() {
 
 void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint16_t weight) {
     /**
-     * When an edge-aggregate core link (say between e_i and a_j) goes down, 
+     * When an edge-aggregate link (say between e_i and a_j) goes down, 
      * two sets of mitigations must be done on WCMP to ensure no packet drops 
      * happen:
      *  - All edges in the same pod as e_i, should set the sending weight of e_i
      *    that points to a_j to zero.
-     *  - All edges in other pods, should point the sending weight of e_i
+     *  - All edges in other pods, should change the sending weight of e_i
      *    that points to all aggregatation routers that are peers with a_j to zero.
      * 
      * The set of core routers serving a_j is easily found from its index, if the a_j
@@ -452,8 +452,6 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
      * are r/2 apart.
     */
 
-    NS_ABORT_MSG("NOT IMPLEMENTED CORRECTLY!!!");
-
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
     uint32_t ei_pod_num = this->getPodNum(ei);
     NS_ASSERT(ei_pod_num == this->getPodNum(aj));
@@ -465,32 +463,27 @@ void ClosTopology :: mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint1
             continue;
         std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
             this->getLinkInterfaceIndices(EDGE, ek, AGGREGATE, aj);
-        SWARM_INFO("Setting WCMP weight on node EDGE " << ek << " with interface " << std::get<1>(props) <<
-            " on level " << ei << " to " << weight);
         doUpdateWcmp(EDGE, ek, std::get<1>(props), ei, weight);
     }
 
     // Update the edges in other pods
     uint32_t node_idx_edge, node_idx_agg;
     
-    // TODO: This needs serious fixes!!!
-    for (uint32_t pod_num = 0; pod_num < numAggAndEdgeeSwitchesPerPod; pod_num++) {
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         if (pod_num == ei_pod_num)
             continue;
         
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
             node_idx_edge = pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx;
             for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
-                node_idx_agg = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
-
-                if ((node_idx_agg % 2) != (aj % 2))
+                if (agg_idx != (aj % numAggAndEdgeeSwitchesPerPod))
                     continue;
+
+                node_idx_agg = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
 
                 std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
                     this->getLinkInterfaceIndices(EDGE, node_idx_edge, AGGREGATE, node_idx_agg);
 
-                SWARM_INFO("Setting WCMP weight on node EDGE " << node_idx_edge << " with interface " << std::get<1>(props) <<
-                    " on level " << ei << " to " << weight);
                 doUpdateWcmp(EDGE, node_idx_edge, std::get<1>(props), ei, weight);
             }
         }
@@ -803,14 +796,10 @@ std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTop
     }
     else {
         NS_ASSERT(src_level == AGGREGATE && dst_level == CORE);
-        
-        if (src_idx % 2 == 0)
-            NS_ASSERT(dst_idx < (this->params.switchRadix / 2));
-        else 
-            NS_ASSERT(dst_idx >= (this->params.switchRadix / 2));
+        NS_ASSERT((src_idx % (this->params.switchRadix / 2)) == (dst_idx % (this->params.switchRadix / 2)));
 
         std::pair<uint32_t, uint32_t> pair_src = this->getPodAndIndex(src_idx);
-        src_if_idx = this->params.switchRadix / 2 + dst_idx + 1;
+        src_if_idx = (dst_idx / (this->params.switchRadix / 2)) + 1;
         dst_if_idx = pair_src.first + 1;
         src = this->getAggregate(src_idx);
         dst = this->getCore(dst_idx);
@@ -894,6 +883,22 @@ void ClosTopology :: doUpdateWcmp(topology_level node_level, uint32_t node_idx, 
     wcmp.SetInterfaceWeight(ipv4, interface_idx, level, weight);
 }
 
+void ClosTopology :: doSetLinkLoss(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string packetLossRate) {
+    std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = this->getLinkInterfaceIndices(
+        src_level, src_idx, dst_level, dst_idx
+    );
+
+    SWARM_DEBG_ALL("Setting packet drop rate on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+        << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props) << " to " << packetLossRate);
+
+    Ptr<RateErrorModel> em = CreateObject<RateErrorModel>();
+    em->SetRate(atof(packetLossRate.c_str()));
+    em->SetUnit(RateErrorModel::ERROR_UNIT_PACKET);
+
+    std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->SetAttribute("ReceiveErrorModel", PointerValue(em));
+    std::get<2>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<3>(props))->SetAttribute("ReceiveErrorModel", PointerValue(em));
+}
+
 void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, 
     uint32_t dst_idx, bool auto_mitiagate) {
     topology->doDisableLink(src_level, src_idx, dst_level, dst_idx, auto_mitiagate);
@@ -914,6 +919,10 @@ void changeDelay(ClosTopology *topology, topology_level src_level, uint32_t src_
 
 void updateWcmp(ClosTopology *topology, topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight) {
     topology->doUpdateWcmp(node_level, node_idx, interface_idx, level, weight);
+}
+
+void setLossRate(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string packetLossRate) {
+    topology->doSetLinkLoss(src_level, src_idx, dst_level, dst_idx, packetLossRate);
 }
 
 void migrateTraffic(FlowScheduler *flow_scheduler, uint32_t migration_source, uint32_t migration_destination, int percent) {
@@ -1068,6 +1077,7 @@ void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *func
     funcs->set_bw_func = changeBandwidth;
     funcs->set_delay_func = changeDelay;
     funcs->set_wcmp_func = updateWcmp;
+    funcs->link_loss_func = setLossRate;
     funcs->migrate_func = migrateTraffic;
 }
 
@@ -1096,6 +1106,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
     cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
     cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
+    cmd.AddValue("out", "Flow Monitor output prefix name", FLOW_FILE_PREFIX);
     
     #if MPI_ENABLED
     cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
@@ -1256,6 +1267,8 @@ int main(int argc, char *argv[]) {
     SWARM_SET_LOG_LEVEL(INFO);
 
     // ns3::RngSeedManager::SetSeed(123456789);
+    NS_OBJECT_ENSURE_REGISTERED(ErrorModel);
+    NS_OBJECT_ENSURE_REGISTERED(RateErrorModel);
 
     parseCmd(argc, argv, &topo_params);
 

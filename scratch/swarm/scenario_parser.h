@@ -11,6 +11,7 @@
 #define SET_DELAY "SET_DELAY"
 #define MIGRATE "MIGRATE"
 #define SET_WCMP "SET_WCMP"
+#define SET_LOSS "SET_LOSS"
 
 using namespace std;
 
@@ -29,11 +30,93 @@ struct scenario_functions {
     void (*set_delay_func) (T*, topology_level, uint32_t, topology_level, uint32_t, const std::string);
     void (*link_down_func) (T*, topology_level, uint32_t, topology_level, uint32_t, bool);
     void (*link_up_func) (T*, topology_level, uint32_t, topology_level, uint32_t, bool);
+    void (*link_loss_func) (T*, topology_level, uint32_t, topology_level, uint32_t, const std::string);
     void (*set_wcmp_func) (T*, topology_level, uint32_t, uint32_t, uint16_t, uint16_t);
     // Flow functions
     void (*migrate_func) (U*, uint32_t, uint32_t, int);
 };
 
+// int getColoring(string path) {
+//     std::ifstream script;
+//     script.open(path);
+
+//     std::string token;
+//     std::string type_token;
+
+//     std::vector
+
+//     while (script >> type_token) {
+//         if (
+//             !strcmp(type_token.c_str(), LINK_DOWN) || 
+//             !strcmp(type_token.c_str(), LINK_UP) ||
+//             !strcmp(type_token.c_str(), SET_RATE) ||
+//             !strcmp(type_token.c_str(), SET_DELAY) || 
+//             !strcmp(type_token.c_str(), SET_LOSS)
+//             ) {
+
+//             topology_level level_1, level_2;
+//             uint32_t index_1, index_2;
+//             script >> token;
+//             auto it = topo_level_str2enum.find(token);
+//             if (it == topo_level_str2enum.end()) {
+//                 SWARM_ERROR("Invalid level: " << token);
+//                 goto fail;
+//             }
+//             level_1 = it->second;
+//             script >> index_1;
+            
+//             script >> token;
+//             it = topo_level_str2enum.find(token);
+//             if (it == topo_level_str2enum.end()) {
+//                 SWARM_ERROR("Invalid level: " << token);
+//                 goto fail;
+//             }
+//             level_2 = it->second;
+//             script >> index_2;
+
+//             // For link Up/Down, auto-mitigation is done by default
+//             if (!strcmp(type_token.c_str(), LINK_DOWN)) {
+//                 SWARM_DEBG("Bringing down link between " << level_1 << ":" << index_1 << " and " 
+//                     << level_2 << ":" << index_2);
+//                 continue;
+//             }
+//             else if (!strcmp(type_token.c_str(), LINK_UP)) {
+//                 SWARM_DEBG("Bringing up link between " << level_1 << ":" << index_1 << " and " 
+//                     << level_2 << ":" << index_2);
+//                 continue;
+//             }
+
+//             string rate_or_delay;
+//             script >> rate_or_delay;
+
+//             if (!strcmp(type_token.c_str(), SET_RATE)) {
+//                 SWARM_DEBG("Setting link bandwidth between " << level_1 << ":" << index_1 << " and " 
+//                     << level_2 << ":" << index_2 << " to " << rate_or_delay);
+//                 continue;
+//             }
+//             else if (!strcmp(type_token.c_str(), SET_LOSS)) {
+//                 SWARM_DEBG("Setting loss rate between " << level_1 << ":" << index_1 << " and " 
+//                     << level_2 << ":" << index_2 << " to " << rate_or_delay);
+//             }
+//             else {
+//                 SWARM_DEBG("Setting link delay between " << level_1 << ":" << index_1 << " and " 
+//                     << level_2 << ":" << index_2 << " to " << rate_or_delay);
+//             }
+//         }
+//         else {
+//             SWARM_ERROR("Invalid expression: " << type_token);
+//             goto fail;
+//         }
+//     }
+
+//     // OK!
+//     script.close();
+//     return 0;
+
+// fail:
+//     script.close();
+//     return -1;
+// }
 
 template <typename T, typename U>
 int parseSecnarioScript(string path, T *topo_object, U *flow_object, scenario_functions<T, U> *scenario_fs) {
@@ -48,7 +131,8 @@ int parseSecnarioScript(string path, T *topo_object, U *flow_object, scenario_fu
             !strcmp(type_token.c_str(), LINK_DOWN) || 
             !strcmp(type_token.c_str(), LINK_UP) ||
             !strcmp(type_token.c_str(), SET_RATE) ||
-            !strcmp(type_token.c_str(), SET_DELAY)
+            !strcmp(type_token.c_str(), SET_DELAY) || 
+            !strcmp(type_token.c_str(), SET_LOSS)
             ) {
 
             topology_level level_1, level_2;
@@ -93,6 +177,11 @@ int parseSecnarioScript(string path, T *topo_object, U *flow_object, scenario_fu
                     << level_2 << ":" << index_2 << " to " << rate_or_delay);
                 scenario_fs->set_bw_func(topo_object, level_1, index_1, level_2, index_2, rate_or_delay);
                 continue;
+            }
+            else if (!strcmp(type_token.c_str(), SET_LOSS)) {
+                SWARM_DEBG("Setting loss rate between " << level_1 << ":" << index_1 << " and " 
+                    << level_2 << ":" << index_2 << " to " << rate_or_delay);
+                scenario_fs->link_loss_func(topo_object, level_1, index_1, level_2, index_2, rate_or_delay);
             }
             else {
                 SWARM_DEBG("Setting link delay between " << level_1 << ":" << index_1 << " and " 

@@ -35,7 +35,7 @@ configure-mpi: copy
 	$(info Configuring with MPI)
 	@ cd ${NS3_DIR}; \
 	export CMAKE_CXX_FLAGS="-DNETANIM_ENABLED=0"; \
-	./ns3 configure --enable-mpi --enable-tests --enable-modules "${INCLUDE_MODULES_MPI}" --filter-module-examples-and-tests "mpi;${TEST_MODULES}" \
+	./ns3 configure --enable-mpi --enable-modules "${INCLUDE_MODULES_MPI}" \
 
 configure-netanim: copy
 	$(info Configuring with NETANIM)

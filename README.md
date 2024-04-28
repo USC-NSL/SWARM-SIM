@@ -43,19 +43,25 @@ Current optional arguments:
 
 ```
 Program Options:
-    --linkRate:     Link data rate in Gbps [40]
-    --linkDelay:    Link delay in microseconds [50]
+    --numPods:      Number of Pods [2]
     --switchRadix:  Switch radix [4]
     --numServers:   Number of servers per edge switch [2]
-    --numPods:      Number of Pods [2]
+    --linkRate:     Link data rate in Gbps [40]
+    --linkDelay:    Link delay in microseconds [50]
     --podBackup:    Enable backup routes in a pod [false]
+    --plainEcmp:    Do normal ECMP [false]
+    --cache:        Use a simple LRU cache for hash lookups [false]
+    --scenario:     Path of the scenario file
     --flow:         Path of the flow file
-    --scream:       Instruct all servers to scream at a given rate for the whole simulation
-    --end:          When to end simulation [4]
-    --micro:        Set time resolution to micro-seconds [false]
-    --verbose:      Enable debug log outputs [false]
     --monitor:      Install FlowMonitor on the network [false]
+    --scream:       Instruct all servers to scream at a given rate for the whole simulation
+    --micro:        Set time resolution to micro-seconds [false]
+    --tcp:          Set the TCP variant to use [TcpDctcp]
+    --out:          Flow Monitor output prefix name [swarm-flow]
     --mpi:          Enable MPI [false]
+    --vis:          Create NetAnim input [false]
+    --end:          When to end simulation [4]
+    --verbose:      Enable debug log outputs [false]
 ```
 
 ## Using MPI

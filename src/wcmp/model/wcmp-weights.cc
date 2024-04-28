@@ -42,7 +42,7 @@ WcmpWeights :: reset () {
     for (uint32_t if_index = 1; if_index < m_ipv4->GetNInterfaces(); if_index++) {
         this->states[if_index] = m_ipv4->IsUp(if_index);
         for (uint16_t level = 0; level < m_levels; level++)
-            this->weights[_GET_LEVELED_IF(level, if_index)] = (uint16_t) 1;
+            this->weights[_GET_LEVELED_IF(level, if_index)] = (uint16_t) DEFAULT_WCMP_WEIGHT;
     }
 }
 
@@ -130,7 +130,7 @@ WcmpWeights :: add_interface(uint32_t if_index, uint16_t weight) {
     this->states[if_index] = this->m_ipv4->IsUp(if_index);
 
     for (uint16_t level = 0; level < m_levels; level++)
-        this->weights[_GET_LEVELED_IF(level, if_index)] = (uint16_t) 1;
+        this->weights[_GET_LEVELED_IF(level, if_index)] = (uint16_t) DEFAULT_WCMP_WEIGHT;
 }
 
 void

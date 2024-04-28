@@ -13,6 +13,7 @@ class Ipv4RoutingTableEntry;
 namespace wcmp {
 
 #define _GET_LEVELED_IF(l, i) (((uint32_t)l << 16) + i)
+#define DEFAULT_WCMP_WEIGHT 100
 
 class WcmpWeights {
     /**
@@ -90,7 +91,7 @@ class WcmpWeights {
          * Add a new interface to the list of tracked interfaces
          * If the interface exists, this does nothing.
         */
-        void add_interface(uint32_t if_index, uint16_t weight = (uint16_t) 1);
+        void add_interface(uint32_t if_index, uint16_t weight = (uint16_t) DEFAULT_WCMP_WEIGHT);
 
         /**
          * A debug function to see if things look right
