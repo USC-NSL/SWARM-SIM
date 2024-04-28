@@ -271,9 +271,6 @@ Ipv4MpiFlowProbe::SendOutgoingLogger(
         );
         ipPayload->AddByteTag(fTag);
     }
-    else {
-        NS_LOG_INFO("Packet did not classify!");
-    }
 }
 
 void

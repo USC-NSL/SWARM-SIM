@@ -26,7 +26,7 @@ NS_LOG_COMPONENT_DEFINE("WcmpThroughputTest");
 
 class WcmpStaticRoutingThroughputTest : public TestCase {
     public:
-        WcmpStaticRoutingThroughputTest();
+        WcmpStaticRoutingThroughputTest(bool plainEcmp);
         ~WcmpStaticRoutingThroughputTest() override;
 
         Ptr<Packet> m_receivedPacket;
@@ -52,12 +52,14 @@ class WcmpStaticRoutingThroughputTest : public TestCase {
         void addFabricInterfaces(std::vector<NetDeviceContainer>);
         void setupAnimation(std::vector<Ptr<Node>>);
         AnimationInterface *anim = nullptr;
+        bool m_plainEcmp;
 };
 
 
-WcmpStaticRoutingThroughputTest :: WcmpStaticRoutingThroughputTest() 
+WcmpStaticRoutingThroughputTest :: WcmpStaticRoutingThroughputTest(bool plainEcmp) 
     : TestCase("WCMP throughput test")
 {
+    m_plainEcmp = plainEcmp;
 }
 
 WcmpStaticRoutingThroughputTest :: ~WcmpStaticRoutingThroughputTest() {
@@ -171,7 +173,13 @@ WcmpStaticRoutingThroughputTest :: setupAnimation(std::vector<Ptr<Node>> nodes) 
     for (int i = 0; i < 5; i++)
         mobility.Install(NodeContainer(nodes[i]));
 
-    this->anim = new AnimationInterface("swarm-anim.xml");
+    std::string name;
+    if (m_plainEcmp)
+        name += "ecmp-test.xml";
+    else
+        name += "wcmp-test.xml";
+
+    this->anim = new AnimationInterface(name);
     // nodes are A, R, Li respectively
     this->anim->SetConstantPosition(nodes[0], 0.0, 10.0);
     this->anim->SetConstantPosition(nodes[1], 10.0, 10.0);
@@ -233,8 +241,6 @@ WcmpStaticRoutingThroughputTest :: addFabricInterfaces(std::vector<NetDeviceCont
 void
 WcmpStaticRoutingThroughputTest :: DoRun()
 {
-    Time::SetResolution(Time::US);
-
     Ptr<Node> A = CreateObject<Node>();
     Ptr<Node> R = CreateObject<Node>();
     Ptr<Node> L1 = CreateObject<Node>();
@@ -252,6 +258,9 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     Ipv4StaticRoutingHelper staticHelper;
     Ipv4ListRoutingHelper listHelper;
     InternetStackHelper interetHelper;
+
+    if (m_plainEcmp)
+        wcmpHelper.doEcmp();
 
     listHelper.Add(staticHelper, 0);
     listHelper.Add(wcmpHelper, -20);
@@ -373,25 +382,31 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     sinkApp.Start(Seconds(1.5));
     sinkApp.Stop(Seconds(5.0));
 
-    // ECMP test
-    emitAtRegularIntervals(A, "10.0.0.2", 300, 2.0, 0.01);
-    
-    // OnOffHelper onoff("ns3::UdpSocketFactory",
-    //                   Address(InetSocketAddress(Ipv4Address("10.0.0.2"), 1234)));
-    // ApplicationContainer sendApp = onoff.Install(A);
-    // sendApp.Start(Seconds(2.0));
-    // sendApp.Stop(Seconds(5.0));
+    if (m_plainEcmp) {
+        // ECMP test
+        emitAtRegularIntervals(A, "10.0.0.2", 300, 2.0, 0.01);
 
-    // WCMP test
-    AdjustWeightsAt(R, 3.0);
+        // Bring down the link between R--L2 at t=4.0
+        Simulator::ScheduleWithContext(
+            R->GetId(),
+            Seconds(4),
+            &WcmpStaticRoutingThroughputTest::setInterfaceDown,
+            this, R, 3
+        );
+    }
+    else {
+        // WCMP test
+        emitAtRegularIntervals(A, "10.0.0.2", 300, 2.0, 0.01);
+        AdjustWeightsAt(R, 3.0);
 
-    // Bring down the link between R--L2 at t=4.0
-    Simulator::ScheduleWithContext(
-        R->GetId(),
-        Seconds(4),
-        &WcmpStaticRoutingThroughputTest::setInterfaceDown,
-        this, R, 3
-    );
+        // Bring down the link between R--L2 at t=4.0
+        Simulator::ScheduleWithContext(
+            R->GetId(),
+            Seconds(4),
+            &WcmpStaticRoutingThroughputTest::setInterfaceDown,
+            this, R, 3
+        );
+    }
 
     // Flow monitor
     // FlowMonitorHelper flowHelper;
@@ -405,7 +420,6 @@ WcmpStaticRoutingThroughputTest :: DoRun()
     
     Simulator::Stop(Seconds(5));
     Simulator::Run();
-    // monitor->SerializeToXmlFile("wcmp-flows.xml", true, false);
     Simulator::Destroy();
 }
 
@@ -418,7 +432,9 @@ class WcmpStaticRoutingTestSuite : public TestSuite
 WcmpStaticRoutingTestSuite::WcmpStaticRoutingTestSuite()
     : TestSuite("wcmp-static-routing", UNIT)
 {
-    AddTestCase(new WcmpStaticRoutingThroughputTest(), TestCase::QUICK);
+    Time::SetResolution(Time::US);
+    AddTestCase(new WcmpStaticRoutingThroughputTest(true), TestCase::QUICK);
+    AddTestCase(new WcmpStaticRoutingThroughputTest(false), TestCase::QUICK);
 }
 
 static WcmpStaticRoutingTestSuite wcmpStaticRoutingTestSuite;

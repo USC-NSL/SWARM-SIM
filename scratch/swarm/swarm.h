@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "scenario_parser.h"
@@ -120,7 +120,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
-#define TCP_PACKET_SIZE 1440
+#define TCP_PACKET_SIZE 1024
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
@@ -433,6 +433,10 @@ std::string param_screamRate = "";            // Rate of All-to-All TCP scream
 bool param_micro = false;                     // Use micro-seconds time resolution
 bool param_verbose = false;                   // Enable SWARM_DEBUG outputs
 bool param_monitor = false;                   // Enable FlowMonitor and FCT reporting
+bool param_plain_ecmp = false;                // Do plain ECMP
+bool param_use_cache = false;                 // Use ECMP/WCMP cache
+
+std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
 
 /************************************
  * Function pointer typedefs
@@ -478,6 +482,8 @@ void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *func
 
 void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
+    ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+        ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
 }
 
 void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params);

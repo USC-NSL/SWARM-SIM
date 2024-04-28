@@ -54,6 +54,35 @@ WcmpWeights :: set_ipv4(Ptr<Ipv4> ipv4) {
 }
 
 Ipv4RoutingTableEntry* 
+WcmpWeights :: chooseEcmp(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val) {
+    // Loop and get the total weight of active interfaces
+    uint32_t if_index;
+
+    std::vector<Ipv4RoutingTableEntry*> up_entries;
+
+    for (auto const & it: equal_cost_entries) {
+        if_index = it->GetInterface();
+
+        // Is the interface up?
+        if (this->states[if_index]) {
+            up_entries.push_back(it);
+        }
+    }
+
+    if (up_entries.size() == 0) {
+        NS_LOG_LOGIC("No Up entries");
+        return nullptr;
+    }
+    else if (up_entries.size() == 1) {
+        // No need to choose!
+        NS_LOG_LOGIC("Just a single Up entry");
+        return up_entries.at(0);
+    }
+
+    return up_entries.at(((uint64_t) hash_val * up_entries.size()) / UINT32_MAX);
+}
+
+Ipv4RoutingTableEntry* 
 WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val, uint16_t level) {
     // printWeights();
     // Loop and get the total weight of active interfaces

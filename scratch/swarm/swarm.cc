@@ -339,6 +339,12 @@ void ClosTopology :: installWcmpStack() {
     Ipv4ListRoutingHelper listHelper;
     WcmpStaticRoutingHelper wcmpHelper((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ipv4StaticRoutingHelper staticHelper;
+
+    if (param_plain_ecmp)
+        wcmpHelper.doEcmp();
+
+    if (param_use_cache)
+        wcmpHelper.useCache();
     
     listHelper.Add(staticHelper, 0);
     listHelper.Add(wcmpHelper, WCMP_ROUTING_PRIORITY);
@@ -1078,6 +1084,8 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
 
     // Routing options
     cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params->enableEdgeBounceBackup);
+    cmd.AddValue("plainEcmp", "Do normal ECMP", param_plain_ecmp);
+    cmd.AddValue("cache", "Use a simple LRU cache for hash lookups", param_use_cache);
 
     // Inputs
     cmd.AddValue("scenario", "Path of the scenario file", param_scneario_file_path);
@@ -1087,6 +1095,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("monitor", "Install FlowMonitor on the network", param_monitor);
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
     cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
+    cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
     
     #if MPI_ENABLED
     cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
@@ -1221,7 +1230,7 @@ void setupMonitoringAndBeingExperiment(
 
     nodes->startApplications(APPLICATION_START_TIME, param_end);
 
-    // DoReportProgress(param_end, flowScheduler);
+    DoReportProgress(param_end, flowScheduler);
     
     auto t_start = std::chrono::system_clock::now();
 
@@ -1236,25 +1245,22 @@ void setupMonitoringAndBeingExperiment(
 
     // Serialize the results
     if (param_monitor) {
-        SWARM_INFO_ALL("Serializing FCT information into prefix " + flow_output_file_name);
+        SWARM_INFO("Serializing FCT information into prefix " + flow_output_file_name);
         flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
     }
 }
 
 int main(int argc, char *argv[]) {
-    // First, do global configurations
-    doGlobalConfigs();
-
     topolgoy_descriptor topo_params;
 
-    SWARM_SET_LOG_LEVEL(WARN);
+    SWARM_SET_LOG_LEVEL(INFO);
 
-    // LogComponentEnable("MpiFlowMonitor", LOG_LEVEL_DEBUG);
-    LogComponentEnable("Ipv4MpiFlowProbe", LOG_LEVEL_INFO);
-    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
-    // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
+    // ns3::RngSeedManager::SetSeed(123456789);
 
     parseCmd(argc, argv, &topo_params);
+
+    // First, do global configurations
+    doGlobalConfigs();
 
     uint32_t totalNumberOfServers = setupSwarmSimulator(
         argc, argv, &topo_params

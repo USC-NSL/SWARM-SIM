@@ -142,7 +142,7 @@ MpiFlowMonitor::ReportFirstTx(Ptr<MpiFlowProbe> probe,
     tracked.firstSeenTime = now;
     tracked.lastSeenTime = tracked.firstSeenTime;
     tracked.timesForwarded = 0;
-    NS_LOG_DEBUG("ReportFirstTx: adding tracked packet (flowId=" << flowId << ", packetId="
+    NS_LOG_INFO("ReportFirstTx: adding tracked packet (flowId=" << flowId << ", packetId="
                                                                  << packetId << ").");
 
     probe->AddPacketStats(flowId, packetSize, Seconds(0));
@@ -192,6 +192,10 @@ MpiFlowMonitor::ReportLastRx(
     FlowStats& stats = GetStatsForFlow(flowId);
     stats.delaySum += delay;
     stats.delayHistogram.AddValue(delay.GetSeconds());
+
+    if (stats.timeFirstTxPacket.ToInteger(Time::GetResolution()) == 0)
+        stats.timeFirstTxPacket = Time::FromInteger(tStart, Time::GetResolution());
+
     if (stats.rxPackets > 0)
     {
         Time jitter = stats.lastDelay - delay;
@@ -399,7 +403,7 @@ MpiFlowMonitor::SerializeToXmlStream(
     bool enableProbes)
 {
     NS_LOG_FUNCTION(this << indent << enableHistograms << enableProbes);
-    // CheckForLostPackets();
+    CheckForLostPackets();
 
     os << std::string(indent, ' ') << "<FlowMonitor>\n";
     indent += 2;
@@ -407,6 +411,9 @@ MpiFlowMonitor::SerializeToXmlStream(
     indent += 2;
     for (auto flowI = m_flowStats.begin(); flowI != m_flowStats.end(); flowI++)
     {
+        if (flowI->second.timeFirstTxPacket.GetInteger() == 0 || flowI->second.timeLastRxPacket.GetInteger() == 0)
+            continue;
+            
         os << std::string(indent, ' ');
 #define ATTRIB(name) << " " #name "=\"" << flowI->second.name << "\""
 #define ATTRIB_TIME(name) << " " #name "=\"" << flowI->second.name.As(Time::NS) << "\""

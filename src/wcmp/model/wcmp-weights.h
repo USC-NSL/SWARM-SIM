@@ -84,6 +84,7 @@ class WcmpWeights {
         */
         // uint32_t choose(std::vector<uint32_t> output_ifs, uint32_t hash_val);
         Ipv4RoutingTableEntry* choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val, uint16_t level=0);
+        Ipv4RoutingTableEntry* chooseEcmp(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val);
 
         /**
          * Add a new interface to the list of tracked interfaces
