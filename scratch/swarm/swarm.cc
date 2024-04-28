@@ -3,7 +3,7 @@
 #include <sys/stat.h>
 #include "swarm.h"
 #include "ns3/flow-monitor-helper.h"
-#include "ns3/ipv4-flow-probe.h"
+#include "ns3/mpi-flow-monitor-helper.h"
 
 
 using namespace ns3;
@@ -711,7 +711,6 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
     }
 
     if ((ptr = this->getLocalHost(client_host))) {
-        SWARM_INFO("Sending echo request from " << this->getServerAddress(client_host) << " to " << this->getServerAddress(server_host));
         UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
         echoClient.SetAttribute("MaxPackets", UintegerValue(1));
         echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
@@ -1066,90 +1065,48 @@ void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *func
     funcs->migrate_func = migrateTraffic;
 }
 
-void enablePcap(ClosTopology *topology, uint32_t totalNumberOfServers) {
-    SWARM_INFO_ALL("Enabling PCAP on local server devices");
-    PointToPointHelper p2p;
-    Ptr<Node> ptr;
-
-    struct stat st = {0};
-    if (stat(PCAP_DIR.c_str(), &st) == -1)
-        mkdir(PCAP_DIR.c_str(), 0700);
-
-    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-        if (ptr = topology->getHost(i)) {
-            NS_ASSERT(ptr->GetNDevices() == 2);
-            p2p.EnablePcap(
-                getPcapOutputName(i),
-                topology->getHost(i)->GetDevice(1),
-                false, true
-            );
-        }
-    }
-}
-
-int main(int argc, char *argv[]) {
-    // First, do global configurations
-    doGlobalConfigs();
-
-    topolgoy_descriptor topo_params;
-    
-    double end = 4.0;
-    
-    std::string flow_file_path = "";
-    std::string scneario_file_path = "";
-    std::string screamRate = "";
-
-    bool micro = false;
-    bool verbose = false;
-    bool monitor = false;
-
-    SWARM_SET_LOG_LEVEL(INFO);
-    // SWARM_SET_LOG_LEVEL(WARN);
-    // LogComponentEnable("UdpEchoServerApplication", LOG_LEVEL_ALL);
-    // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
-    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
-    // LogComponentEnable("WcmpStaticRouting", LOG_LEVEL_ALL);
-
+void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     CommandLine cmd(__FILE__);
     // Clos Topology parameters
-    cmd.AddValue("numPods", "Number of Pods", topo_params.numPods);
-    cmd.AddValue("switchRadix", "Switch radix", topo_params.switchRadix);
-    cmd.AddValue("numServers", "Number of servers per edge switch", topo_params.numServers);
+    cmd.AddValue("numPods", "Number of Pods", topo_params->numPods);
+    cmd.AddValue("switchRadix", "Switch radix", topo_params->switchRadix);
+    cmd.AddValue("numServers", "Number of servers per edge switch", topo_params->numServers);
 
     // Link parameters
-    cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params.linkRate);
-    cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params.linkDelay);
+    cmd.AddValue("linkRate", "Link data rate in Gbps", topo_params->linkRate);
+    cmd.AddValue("linkDelay", "Link delay in microseconds", topo_params->linkDelay);
 
     // Routing options
-    cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params.enableEdgeBounceBackup);
+    cmd.AddValue("podBackup", "Enable backup routes in a pod", topo_params->enableEdgeBounceBackup);
 
     // Inputs
-    cmd.AddValue("scenario", "Path of the scenario file", scneario_file_path);
-    cmd.AddValue("flow", "Path of the flow file", flow_file_path);
+    cmd.AddValue("scenario", "Path of the scenario file", param_scneario_file_path);
+    cmd.AddValue("flow", "Path of the flow file", param_flow_file_path);
 
     // Simulation options
-    cmd.AddValue("monitor", "Install FlowMonitor on the network", monitor);
-    cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", screamRate);
-    cmd.AddValue("micro", "Set time resolution to micro-seconds", micro);
+    cmd.AddValue("monitor", "Install FlowMonitor on the network", param_monitor);
+    cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
+    cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
     
     #if MPI_ENABLED
-    cmd.AddValue("mpi", "Enable MPI", topo_params.mpi);
+    cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
     #endif /* MPI_ENABLED */
 
     #if NETANIM_ENABLED
-    cmd.AddValue("vis", "Create NetAnim input", topo_params.animate);
+    cmd.AddValue("vis", "Create NetAnim input", topo_params->animate);
     #endif /* NETANIM_ENABLED */
 
-    cmd.AddValue("end", "When to end simulation", end);
+    cmd.AddValue("end", "When to end simulation", param_end);
 
     // Logging options
-    cmd.AddValue("verbose", "Enable debug log outputs", verbose);
+    cmd.AddValue("verbose", "Enable debug log outputs", param_verbose);
 
     cmd.Parse(argc, argv);
+}
 
+uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params) {
     #if MPI_ENABLED
-    if (topo_params.mpi) {
-        // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
+    if (topo_params->mpi) {
         GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
         MpiInterface::Enable(&argc, &argv);
 
@@ -1158,105 +1115,92 @@ int main(int argc, char *argv[]) {
     }
     #endif /* MPI_ENABLED */
 
-    if (micro)
+    if (param_micro)
         Time::SetResolution(Time::US);
     else
         Time::SetResolution(Time::NS);
 
-    if (verbose)
+    if (param_verbose)
         SWARM_SET_LOG_LEVEL(DEBG);
 
-    logDescriptors(&topo_params);
+    logDescriptors(topo_params);
 
-    if (!monitor)
+    if (!param_monitor)
         SWARM_WARN("Flow monitoring is DISABLED");
     
     SWARM_INFO("Creating SWARM topology");
-    uint32_t totalNumberOfServers = topo_params.numPods * topo_params.switchRadix * topo_params.numServers / 2;
+    uint32_t totalNumberOfServers = topo_params->numPods * topo_params->switchRadix * topo_params->numServers / 2;
     SWARM_INFO("Total number of servers " << totalNumberOfServers);
 
+    return totalNumberOfServers;
+}
 
-    // First, bind our level mapping function for WCMP
-    wcmp_level_mapper = [topo_params](Ipv4Address dest) {
-        // return podLevelMapper(dest, &topo_params);
-        return torLevelMapper(dest, &topo_params);
-    };
-
-    // Create the topology
-    ClosTopology nodes = ClosTopology(topo_params);
-    nodes.createTopology();
-    nodes.createLinks();
+void setupClosTopology(ClosTopology *nodes) {
+    // Create nodes and links
+    nodes->createTopology();
+    nodes->createLinks();
 
     // Assign IP addresses and create fabric interfaces
-    nodes.assignServerIps();
-    nodes.createFabricInterfaces();
+    nodes->assignServerIps();
+    nodes->createFabricInterfaces();
 
     // Do ECMP
-    nodes.setupServerRouting();
-    nodes.setupCoreRouting();
-    nodes.doEcmp();
+    nodes->setupServerRouting();
+    nodes->setupCoreRouting();
+    nodes->doEcmp();
 
     // Enable backup paths on aggregations
-    if (topo_params.enableEdgeBounceBackup) {
+    if (nodes->params.enableEdgeBounceBackup) {
         SWARM_INFO("Enabling intra-pod backup routes");
-        nodes.enableAggregateBackupPaths();
+        nodes->enableAggregateBackupPaths();
     }
+}
+
+template<typename T> 
+void setupMonitoringAndBeingExperiment(
+    ClosTopology *nodes, 
+    uint32_t totalNumberOfServers,
+    string flow_output_file_name
+    ) {
 
     // Setup flow monitor
-    FlowMonitorHelper flowMonitorHelper;
-    if (monitor) {
-        // #if MPI_ENABLED
-        // // if (topo_params.mpi)
-        // //     enablePcap(&nodes, totalNumberOfServers);
-        // // else {
-        //     Ptr<Node> ptr;
-        //     SWARM_INFO("Installing Flow Monitor on all servers");
-        //     // for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-        //     //     if ((ptr = nodes.getLocalHost(i)))
-        //     //         flowMonitorHelper.Install(ptr);
-        //     // }
-        //     flowMonitorHelper.InstallAll();
-        // // }
-        // #else
-        
-        #if MPI_ENABLED
-        NS_OBJECT_ENSURE_REGISTERED(Ipv4FlowProbeTag);
-        #endif
-
+    T flowMonitorHelper;
+    if (param_monitor) {
         Ptr<Node> ptr;
         SWARM_INFO("Installing Flow Monitor on all local servers");
         for (uint32_t i = 0; i < totalNumberOfServers; i++) {
-            if ((ptr = nodes.getLocalHost(i)))
+            if ((ptr = nodes->getLocalHost(i))) {
                 flowMonitorHelper.Install(ptr);
+            }
         }
     }
 
     // Get the flow file
     FlowScheduler *flowScheduler = nullptr;
-    if (flow_file_path.length()) {
-        SWARM_INFO("Scheduling flows on network from " << flow_file_path);
+    if (param_flow_file_path.length()) {
+        SWARM_INFO("Scheduling flows on network from " << param_flow_file_path);
 
         // Bind the flow dispatcher function
         host_flow_dispatcher_function = [nodes](host_flow *flow) {
-            return closHostFlowDispatcher(flow, &nodes);
+            return closHostFlowDispatcher(flow, nodes);
         };
 
         // Install packet sinks on each server
-        nodes.installTcpPacketSinks();
+        nodes->installTcpPacketSinks();
 
         // Create the flow scheduler
-        flowScheduler = new FlowScheduler(flow_file_path, host_flow_dispatcher_function);
+        flowScheduler = new FlowScheduler(param_flow_file_path, host_flow_dispatcher_function);
     }
 
     // Bind scenario functions and get the file
     scenario_functions<ClosTopology, FlowScheduler> funcs;
-    if (scneario_file_path.length()) {
-        SWARM_INFO("Using scenarios specified in " << scneario_file_path);
+    if (param_scneario_file_path.length()) {
+        SWARM_INFO("Using scenarios specified in " << param_scneario_file_path);
 
         bindScenarioFunctions(&funcs);
         if (
             parseSecnarioScript<ClosTopology, FlowScheduler>(
-                scneario_file_path, &nodes, flowScheduler, &funcs
+                param_scneario_file_path, nodes, flowScheduler, &funcs
         ))
         {
             NS_ABORT_MSG("Scenario file could not be parsed, aborting");
@@ -1264,30 +1208,24 @@ int main(int argc, char *argv[]) {
     }
     
     // Do constant all-to-all stream if needed
-    if (screamRate.length()) {
-        SWARM_INFO("Doing all-to-all TCP scream with a rate of " << screamRate);
-        nodes.doAllToAllTcp(totalNumberOfServers, screamRate);
+    if (param_screamRate.length()) {
+        SWARM_INFO("Doing all-to-all TCP scream with a rate of " << param_screamRate);
+        nodes->doAllToAllTcp(totalNumberOfServers, param_screamRate);
     }
-
-    nodes.echoBetweenHosts(0, 4);
 
     SWARM_INFO("Starting applications");
     if (flowScheduler)
         flowScheduler->begin();
 
-    nodes.startApplications(APPLICATION_START_TIME, end);
+    // nodes->echoBetweenHosts(0, totalNumberOfServers-1);
 
-    // DoReportProgress(end, flowScheduler);
+    nodes->startApplications(APPLICATION_START_TIME, param_end);
+
+    // DoReportProgress(param_end, flowScheduler);
     
     auto t_start = std::chrono::system_clock::now();
 
-    Ptr<OutputStreamWrapper> routingStream =
-        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(0), routingStream);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(1), routingStream);
-    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.1), nodes.getCore(2), routingStream);
-
-    Simulator::Stop(Seconds(end + QUIET_INTERVAL_LENGTH));
+    Simulator::Stop(Seconds(param_end + QUIET_INTERVAL_LENGTH));
     Simulator::Run();
     Simulator::Destroy();
 
@@ -1296,25 +1234,67 @@ int main(int argc, char *argv[]) {
     std::chrono::duration<float> took = t_end - t_start;
     SWARM_INFO("Run finished! Took " << (std::chrono::duration_cast<std::chrono::milliseconds>(took).count()) / 1000.0 << " s");
 
-    if (monitor) {
-        #if MPI_ENABLED
-        if (!topo_params.mpi) {
-            SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
-            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        }
-        else {
-            SWARM_INFO_ALL("Serializing FCT information into " + FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml");
-            flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_PREFIX + std::to_string(systemId) + ".xml", false, false);
-        }
-        #else
-        SWARM_INFO("Serializing FCT information into " + FLOW_FILE_OUTPUT);
-        flowMonitorHelper.GetMonitor()->SerializeToXmlFile(FLOW_FILE_OUTPUT, false, false);
-        #endif
+    // Serialize the results
+    if (param_monitor) {
+        SWARM_INFO_ALL("Serializing FCT information into prefix " + flow_output_file_name);
+        flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
     }
+}
 
+int main(int argc, char *argv[]) {
+    // First, do global configurations
+    doGlobalConfigs();
+
+    topolgoy_descriptor topo_params;
+
+    SWARM_SET_LOG_LEVEL(WARN);
+
+    // LogComponentEnable("MpiFlowMonitor", LOG_LEVEL_DEBUG);
+    LogComponentEnable("Ipv4MpiFlowProbe", LOG_LEVEL_INFO);
+    // LogComponentEnable("FlowMonitor", LOG_LEVEL_DEBUG);
+    // LogComponentEnable("Ipv4FlowProbe", LOG_LEVEL_DEBUG);
+
+    parseCmd(argc, argv, &topo_params);
+
+    uint32_t totalNumberOfServers = setupSwarmSimulator(
+        argc, argv, &topo_params
+    );
+
+    // First, bind our level mapping function for WCMP
+    wcmp_level_mapper = [topo_params](Ipv4Address dest) {
+        return torLevelMapper(dest, &topo_params);
+    };
+
+    // Create the topology
+    ClosTopology nodes = ClosTopology(topo_params);
+    setupClosTopology(&nodes);
+
+    // Setup FlowMonitor and begin the experiment
     #if MPI_ENABLED
-    if (topo_params.mpi)
+    MpiFlowMonitorHelper::SetSystemId(systemId);
+
+    if (topo_params.mpi) {
+        setupMonitoringAndBeingExperiment<MpiFlowMonitorHelper>(
+            &nodes, 
+            totalNumberOfServers,
+            FLOW_FILE_PREFIX
+        );
+
         MpiInterface::Disable();
+    }
+    else {
+        setupMonitoringAndBeingExperiment<FlowMonitorHelper>(
+            &nodes, 
+            totalNumberOfServers,
+            FLOW_FILE_OUTPUT
+        );
+    }
+    #else
+        setupMonitoringAndBeingExperiment<FlowMonitorHelper>(
+            &nodes, 
+            totalNumberOfServers,
+            FLOW_FILE_OUTPUT
+        );
     #endif
 
     return 0;

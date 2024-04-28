@@ -1,0 +1,19 @@
+build_lib(
+  LIBNAME flowmon-mpi
+  SOURCE_FILES
+    helper/mpi-flow-monitor-helper.cc
+    model/ipv4-mpi-flow-probe.cc
+    model/mpi-flow-monitor.cc
+    model/mpi-flow-probe.cc
+    model/mpi-flow-classifier.cc
+    model/ipv4-mpi-flow-classifier.cc
+  HEADER_FILES
+    helper/mpi-flow-monitor-helper.h
+    model/mpi-flow-monitor.h
+    model/mpi-flow-probe.h
+    model/ipv4-mpi-flow-probe.h
+    model/mpi-flow-classifier.h
+    model/ipv4-mpi-flow-classifier.h
+  LIBRARIES_TO_LINK
+    ${libinternet}
+)
