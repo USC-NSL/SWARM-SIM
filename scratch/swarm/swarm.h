@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "scenario_parser.h"
@@ -56,7 +56,7 @@ using namespace std;
 */
 string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 string FLOW_FILE_OUTPUT = "swarm-flow.xml";
-string FLOW_FILE_PREFIX = "swarm-flow-";
+string FLOW_FILE_PREFIX = "swarm-flow";
 string PCAP_DIR = "swarm-pcaps";
 string PCAP_PREFIX = "host-";
 
@@ -120,7 +120,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
-#define TCP_PACKET_SIZE 1440
+#define TCP_PACKET_SIZE 1024
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
@@ -421,6 +421,24 @@ class ClosTopology {
 };
 
 /************************************
+ *  Simulation inputs
+************************************/
+
+double param_end = 4.0;                       // When simulation ends in seconds
+
+std::string param_flow_file_path = "";        // Path to traffic file
+std::string param_scneario_file_path = "";    // Path to scenario file
+std::string param_screamRate = "";            // Rate of All-to-All TCP scream
+
+bool param_micro = false;                     // Use micro-seconds time resolution
+bool param_verbose = false;                   // Enable SWARM_DEBUG outputs
+bool param_monitor = false;                   // Enable FlowMonitor and FCT reporting
+bool param_plain_ecmp = false;                // Do plain ECMP
+bool param_use_cache = false;                 // Use ECMP/WCMP cache
+
+std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
+
+/************************************
  * Function pointer typedefs
 ************************************/
 
@@ -464,17 +482,20 @@ void bindScenarioFunctions(scenario_functions<ClosTopology, FlowScheduler> *func
 
 void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
+    ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
+        ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
 }
 
-/**
- * PCAP is the only way to consistently monitor packet data
- * when using MPI. We generate a single PCAP file for all the
- * devices attached to a server.
-*/
-void enablePcap(ClosTopology *topology, uint32_t totalNumberOfServers);
+void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params);
 
-std::string getPcapOutputName(uint32_t i) {
-    return PCAP_DIR + "/" + PCAP_PREFIX + std::to_string(i) + ".pcap";
-}
+uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params);
+
+void setupClosTopology(ClosTopology *nodes);
+
+template<typename T> 
+void setupMonitoringAndBeingExperiment(
+    ClosTopology *nodes, 
+    uint32_t totalNumberOfServers,
+    std::string flow_output_file_name);
 
 #endif /* SWARM_H */

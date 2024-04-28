@@ -26,6 +26,7 @@ NUM_PODS = 2
 SWITCH_RADIX = 4
 NUM_SERVERS = 2
 TCP_DST_PORT = 10
+NO_ACKS = False
 
 
 def map_ip_to_host_idx(ip):
@@ -94,10 +95,11 @@ class MpiPcapReader:
 
 
 class FlowMonitorXmlParser:
-    def __init__(self, path) -> None:
-        self.path = path
+    def __init__(self, paths) -> None:
+        self.paths = paths
         # Map flow id to `(size, flow_completion_time)`
         self.fcts = {}
+        self.ack_ids = []
 
     @staticmethod
     def parse_time_ns(tm: str):
@@ -105,15 +107,15 @@ class FlowMonitorXmlParser:
             return float(tm[:-2])
         raise ValueError(tm)
     
-    @classmethod
-    def parse_flow_files(cls, paths: List[str]):
-        all_fcts = []
-        for path in paths:
-            obj = cls(path)
-            obj.parse_flow_file()
-            all_fcts.append(obj.get_fcts())
+    def parse_flow_files(self):
+        for path in self.paths:
+            self.parse_flow_file(path)
 
-        return all_fcts
+        if NO_ACKS:
+            for ack_id in self.ack_ids:
+                self.fcts.pop(ack_id)
+                
+        print(f"Parsed {len(self.fcts)} flows")
     
     @staticmethod
     def plot_cdf(fcts, log_scale=True):
@@ -122,17 +124,12 @@ class FlowMonitorXmlParser:
             stat='proportion', 
             log_scale=log_scale
         )
-    
-    def clear(self):
-        self.fcts.clear()
 
     def get_fcts(self):
         return self.fcts
     
-    def parse_flow_file(self):
-        self.clear()
-        
-        context = ET.iterparse(self.path, events=("start", "end"))
+    def parse_flow_file(self, path):
+        context = ET.iterparse(path, events=("start", "end"))
         context = iter(context)
 
         level = 0
@@ -166,13 +163,19 @@ class FlowMonitorXmlParser:
                     assert tag == 'Flow'
                     if parsing_flow_stats:
                         attrib = elem.attrib
+                        assert int(attrib['flowId']) not in self.fcts
+                        assert self.parse_time_ns(attrib['timeLastRxPacket']) > 0
+                        assert self.parse_time_ns(attrib['timeFirstTxPacket']) > 0
+
                         self.fcts[int(attrib['flowId'])] = (
                             int(attrib['rxBytes']),
                             (self.parse_time_ns(attrib['timeLastRxPacket']) - self.parse_time_ns(attrib['timeFirstTxPacket'])) * 1e-9
                         )
                         level += 1
                     elif parsing_flow_class:
-                        # TODO: Prase flow class if needed
+                        attrib = elem.attrib
+                        if (int(attrib['sourcePort']) == TCP_DST_PORT) and NO_ACKS:
+                            self.ack_ids.append(int(attrib['flowId']))
                         level += 1
                         pass
                 else:
@@ -201,31 +204,43 @@ class FlowMonitorXmlParser:
                 
             elem.clear()
         
-        print(f"Parsed {len(self.fcts)} flows")
-        
 
-def plot_cdfs(all_fcts, title, legends):
-    for i in range(len(all_fcts)):
-        FlowMonitorXmlParser.plot_cdf(all_fcts[i])
+def plot_cdfs(all_fcts):
+    FlowMonitorXmlParser.plot_cdf(all_fcts)
 
     plt.ylabel("CDF")
     plt.xlabel("FCT (ms)")
-    plt.title(title)
-    plt.legend(legends)
-    plt.show()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Parse Flow-Monitor XML outputs or PCAPs")
 
-    parser.add_argument('--xml', nargs='+', help="Path(s) to the Flow-Monitor XML outputs")
+    parser.add_argument('--xml1', nargs='+', help="Path(s) to the Flow-Monitor XML outputs")
+    parser.add_argument('--xml2', nargs='+', help="Path(s) to the Flow-Monitor XML outputs")
     parser.add_argument('--pcap', help="Path to the directory containing PCAP files")
+    parser.add_argument('--no-acks', action='store_true', help="Do not consider ACK flows")
 
     args = parser.parse_args()
+
+    if args.no_acks:
+        NO_ACKS = True
+
+    vals1 = None
+    vals2 = None
     
-    if args.xml:
-        all_fcts = FlowMonitorXmlParser.parse_flow_files(args.xml)
-        plot_cdfs(all_fcts, "title", ["Low Load", "Medium Load", "High Load"])
+    if args.xml1:
+        flow_monitor_parser = FlowMonitorXmlParser(args.xml1)
+        flow_monitor_parser.parse_flow_files()
+        vals1 = sorted([e[1] for e in list(flow_monitor_parser.get_fcts().values())])
+        plot_cdfs(flow_monitor_parser.get_fcts())
+    
+    if args.xml2:
+        flow_monitor_parser = FlowMonitorXmlParser(args.xml2)
+        flow_monitor_parser.parse_flow_files()
+        vals2 = sorted([e[1] for e in list(flow_monitor_parser.get_fcts().values())])
+        plot_cdfs(flow_monitor_parser.get_fcts())
+
+    plt.show()
 
     if args.pcap:
         mpi_pcap_reader = MpiPcapReader(args.pcap)

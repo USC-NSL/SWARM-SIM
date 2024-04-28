@@ -1,6 +1,7 @@
 #include "ns3/ptr.h"
 #include "ns3/node.h"
 #include "ns3/integer.h"
+#include "ns3/boolean.h"
 #include "wcmp-static-routing-helper.h"
 
 namespace ns3
@@ -20,6 +21,16 @@ WcmpStaticRoutingHelper :: WcmpStaticRoutingHelper(uint16_t level, level_mapper_
 WcmpStaticRoutingHelper :: WcmpStaticRoutingHelper(const WcmpStaticRoutingHelper& o) 
     : m_factory(o.m_factory)
 {
+}
+
+void
+WcmpStaticRoutingHelper :: doEcmp() {
+    this->m_factory.Set("ecmp", BooleanValue(true));
+}
+
+void
+WcmpStaticRoutingHelper :: useCache() {
+    this->m_factory.Set("UseCache", BooleanValue(true));
 }
 
 WcmpStaticRoutingHelper*

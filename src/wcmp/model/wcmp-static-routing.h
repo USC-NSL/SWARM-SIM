@@ -51,6 +51,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Whether or not to use the WCMP cache
         bool m_use_cache;
 
+        /// Use plain ECMP
+        bool m_do_plain_ecmp;
+
         /// Number of levels for the WCMP hash atable
         uint16_t m_levels;
 
@@ -69,6 +72,7 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// WCMP hash cache, speeds up lookup
         std::unordered_map<uint32_t, std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>> wcmp_cache;
+        std::unordered_map<uint32_t, Ipv4RoutingTableEntry*> ecmp_cache;
 
         /// Container for the network routes
         typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>> NetworkRoutes;
@@ -94,16 +98,24 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         }
 
         Ipv4RoutingTableEntry* LookupCache(uint32_t hash_val, Ipv4Address dest) {
-            auto res = wcmp_cache.find(hash_val);
-            if (res == wcmp_cache.end())
-                return nullptr;
-            
-            for (auto elem = res->second.begin(); elem != res->second.end(); elem++) {
-                if (elem->first == dest)
-                    return elem->second;
+            if (m_do_plain_ecmp) {
+                auto res = ecmp_cache.find(hash_val);
+                if (res == ecmp_cache.end())
+                    return nullptr;
+                return res->second;
             }
+            else {
+                auto res = wcmp_cache.find(hash_val);
+                if (res == wcmp_cache.end())
+                    return nullptr;
+                
+                for (auto elem = res->second.begin(); elem != res->second.end(); elem++) {
+                    if (elem->first == dest)
+                        return elem->second;
+                }
 
-            NS_ABORT_MSG("Invalid cache miss, this should not happen!");
+                NS_ABORT_MSG("Invalid cache miss, this should not happen!");
+            }
         }
 
         void UpdateCache(uint32_t hash_val, Ipv4Address dest, Ipv4RoutingTableEntry *entry) {
@@ -112,6 +124,14 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
                 wcmp_cache[hash_val] = std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>{std::make_pair(dest, entry)};
             else
                 wcmp_cache[hash_val].push_back(std::make_pair(dest, entry));
+        }
+
+        void UpdateEcmpCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry) {
+            auto res = ecmp_cache.find(hash_val);
+            if (res == ecmp_cache.end())
+                ecmp_cache[hash_val] = entry;
+            else
+                NS_ABORT_MSG("You should not be here!!!");
         }
 
     public:

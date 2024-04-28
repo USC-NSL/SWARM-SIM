@@ -103,7 +103,8 @@ if __name__ == "__main__":
 
 	print_manifest(avg, n_flow_estimate, nhost, args.bandwidth, load, float(args.time))
 
-	output = args.output if args.output else os.path.join(GENERATED_DIR, f"{nhost}_{args.bandwidth}_{load}_{args.time}_{args.cdf_file}.txt")
+	name = args.cdf_file.replace(".txt", "")
+	output = args.output if args.output else os.path.join(GENERATED_DIR, f"{nhost}_{args.bandwidth}_{load}_{args.time}_{name}.txt")
 
 	pbar = tqdm.tqdm(total=n_flow_estimate)
 	count = 0

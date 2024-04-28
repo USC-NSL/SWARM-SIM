@@ -21,6 +21,9 @@ class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
         Ptr<wcmp::WcmpStaticRouting> GetWcmpStaticRouting(Ptr<Ipv4> ipv4) const;
         void SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t level, uint16_t weight);
 
+        void doEcmp();
+        void useCache();
+
     private:
         ObjectFactory m_factory;
         level_mapper_func m_func = nullptr;
