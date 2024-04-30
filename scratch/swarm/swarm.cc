@@ -1054,6 +1054,8 @@ void reportFlowProgress(FlowScheduler *flowScheduler) {
     }
     else {
         std::clog << std::endl;
+        SWARM_INFO("All flows have been loaded, switching to simulation time reports");
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, param_end);
     }
 }
 
@@ -1062,8 +1064,7 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         return;
     
     if (flowSCheduler)
-        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
-        // Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
     else
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
