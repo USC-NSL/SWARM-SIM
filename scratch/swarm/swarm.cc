@@ -2,6 +2,7 @@
 #include <thread>
 #include <sys/stat.h>
 #include "swarm.h"
+#include "ns3/single-flow-helper.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/mpi-flow-monitor-helper.h"
 
@@ -986,14 +987,12 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     Ptr<Node> ptr;
 
     if ((ptr = topo->getLocalHost(flow->src))) {
-        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
+        SingleFlowHelper singleFlowClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
 
-        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-        onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        onOffClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
-        onOffClient.SetAttribute("MaxBytes", UintegerValue(flow->size));
-        onOffClient.Install(ptr).Start(Time(0));
+        singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
+        singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
+        singleFlowClient.Install(ptr).Start(Time(0));
     }
 }
 
@@ -1063,7 +1062,8 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         return;
     
     if (flowSCheduler)
-        Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
+        // Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
     else
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
