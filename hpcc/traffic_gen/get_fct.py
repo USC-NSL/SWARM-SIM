@@ -15,6 +15,7 @@ We output two things:
 import os
 import sys
 import argparse
+import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import xml.etree.cElementTree as ET
@@ -27,6 +28,9 @@ SWITCH_RADIX = 4
 NUM_SERVERS = 2
 TCP_DST_PORT = 10
 NO_ACKS = False
+
+T_START = 1.333
+T_FINISH = 1.667
 
 
 def map_ip_to_host_idx(ip):
@@ -100,6 +104,8 @@ class FlowMonitorXmlParser:
         # Map flow id to `(size, flow_completion_time)`
         self.fcts = {}
         self.ack_ids = []
+        self.min_start_tx = None
+        self.max_last_rx = None
 
     @staticmethod
     def parse_time_ns(tm: str):
@@ -115,7 +121,10 @@ class FlowMonitorXmlParser:
             for ack_id in self.ack_ids:
                 self.fcts.pop(ack_id, None)
                 
+        print(f"Results for {self.paths[0]}")
         print(f"Parsed {len(self.fcts)} flows")
+        print(f"Flows between {self.min_start_tx} and {self.max_last_rx}")
+        print(f"FCT p99 is {np.percentile([1000 * elem[1] for elem in self.fcts.values()], 98)}")
     
     @staticmethod
     def plot_cdf(fcts, log_scale=True):
@@ -166,11 +175,27 @@ class FlowMonitorXmlParser:
                         assert int(attrib['flowId']) not in self.fcts
                         # assert self.parse_time_ns(attrib['timeLastRxPacket']) > 0
                         # assert self.parse_time_ns(attrib['timeFirstTxPacket']) > 0
+                        t_start = self.parse_time_ns(attrib['timeFirstTxPacket']) * 1e-9
+                        t_finish = self.parse_time_ns(attrib['timeLastRxPacket']) * 1e-9
 
-                        self.fcts[int(attrib['flowId'])] = (
-                            int(attrib['rxBytes']),
-                            (self.parse_time_ns(attrib['timeLastRxPacket']) - self.parse_time_ns(attrib['timeFirstTxPacket'])) * 1e-9
-                        )
+                        if t_start < T_FINISH and t_start >= T_START:
+                            self.fcts[int(attrib['flowId'])] = (
+                                int(attrib['rxBytes']),
+                                (t_finish - t_start)
+                            )
+                            
+                            if not self.min_start_tx:
+                                self.min_start_tx = t_start
+                            else:
+                                if self.min_start_tx > t_start:
+                                    self.min_start_tx = t_start
+
+                            if not self.max_last_rx:
+                                self.max_last_rx = t_finish
+                            else:
+                                if self.max_last_rx < t_finish:
+                                    self.max_last_rx = t_finish
+                        
                         level += 1
                     elif parsing_flow_class:
                         attrib = elem.attrib

@@ -122,7 +122,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 #define UDP_PACKET_SIZE_SMALL 64
 #define TCP_PACKET_SIZE 1024
 
-#define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
+#define TICK_PROGRESS_EVERY_WHAT_PERCENT 0.1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
 #define PROGRESS_BAR_WIDTH 70
 
@@ -182,6 +182,7 @@ bool param_verbose = false;                   // Enable SWARM_DEBUG outputs
 bool param_monitor = false;                   // Enable FlowMonitor and FCT reporting
 bool param_plain_ecmp = false;                // Do plain ECMP
 bool param_use_cache = false;                 // Use ECMP/WCMP cache
+bool param_no_acks = false;                   // Do not monitor ACK flows
 
 #if MPI_ENABLED
 bool param_super_mpi = false;                 // Whether or not to use super-mpi

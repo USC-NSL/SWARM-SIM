@@ -3,6 +3,7 @@
 #include "ns3/packet.h"
 #include "ns3/tcp-header.h"
 #include "ns3/udp-header.h"
+#include "ns3/simulator.h"
 
 #include <algorithm>
 
@@ -12,6 +13,8 @@ namespace ns3
 /* see http://www.iana.org/assignments/protocol-numbers */
 const uint8_t TCP_PROT_NUMBER = 6;  //!< TCP Protocol number
 const uint8_t UDP_PROT_NUMBER = 17; //!< UDP Protocol number
+
+uint16_t Ipv4MpiFlowClassifier :: m_sourcePortToFilter;
 
 bool
 operator<(const Ipv4MpiFlowClassifier::FiveTuple& t1, const Ipv4MpiFlowClassifier::FiveTuple& t2)
@@ -125,6 +128,10 @@ Ipv4MpiFlowClassifier::Classify(
 
     tuple.sourcePort = srcPort;
     tuple.destinationPort = dstPort;
+
+    // Ignore source ports ...
+    if (srcPort == Ipv4MpiFlowClassifier :: GetSourcePortToFilter())
+        return false;
 
     // try to insert the tuple, but check if it already exists
     auto insert = m_flowMap.insert(std::pair<FiveTuple, FlowId>(tuple, 0));

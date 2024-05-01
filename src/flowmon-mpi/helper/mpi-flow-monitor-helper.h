@@ -5,6 +5,7 @@
 #include "ns3/mpi-flow-monitor.h"
 #include "ns3/node-container.h"
 #include "ns3/object-factory.h"
+#include "ns3/ipv4-mpi-flow-probe.h"
 
 #include <string>
 
@@ -12,12 +13,12 @@ namespace ns3
 {
 
 class AttributeValue;
-class Ipv4MpiFlowClassifier;
 
 class MpiFlowMonitorHelper
 {
   public:
     static uint32_t m_systemId;
+    static uint16_t sourcePortToFilter;
 
     MpiFlowMonitorHelper();
     ~MpiFlowMonitorHelper();
@@ -48,8 +49,17 @@ class MpiFlowMonitorHelper
       MpiFlowMonitorHelper :: m_systemId = systemId;
     }
 
+    static void SetSourcePortToFilter(uint16_t port) {
+      MpiFlowMonitorHelper :: sourcePortToFilter = port;
+      Ipv4MpiFlowClassifier :: SetSourcePortToFilter(port);
+    }
+
     uint32_t GetSystemId() {
       return MpiFlowMonitorHelper :: m_systemId;
+    }
+
+    uint16_t GetSourcePortToFilter() {
+      return MpiFlowMonitorHelper :: sourcePortToFilter;
     }
 
   private:
@@ -57,6 +67,8 @@ class MpiFlowMonitorHelper
     Ptr<MpiFlowMonitor> m_flowMonitor;        //!< the FlowMonitor object
     Ptr<MpiFlowClassifier> m_flowClassifier4; //!< the MpiFlowClassifier object for IPv4
 };
+
+uint16_t MpiFlowMonitorHelper :: sourcePortToFilter = 0;
 
 uint32_t MpiFlowMonitorHelper :: m_systemId;
 

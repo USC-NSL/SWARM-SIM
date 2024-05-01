@@ -1064,7 +1064,8 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         return;
     
     if (flowSCheduler)
-        Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
+        // Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
     else
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
@@ -1103,6 +1104,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("monitor", "Install FlowMonitor on the network", param_monitor);
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
     cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
+    cmd.AddValue("noAcks", "Do not monitor ACKs", param_no_acks);
     cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
     cmd.AddValue("out", "Flow Monitor output prefix name", FLOW_FILE_PREFIX);
     
@@ -1305,6 +1307,8 @@ int main(int argc, char *argv[]) {
     // Setup FlowMonitor and begin the experiment
     #if MPI_ENABLED
     MpiFlowMonitorHelper::SetSystemId(systemId);
+    if (param_no_acks)
+        MpiFlowMonitorHelper::SetSourcePortToFilter(TCP_DISCARD_PORT);
 
     if (topo_params.mpi) {
         setupMonitoringAndBeingExperiment<MpiFlowMonitorHelper>(

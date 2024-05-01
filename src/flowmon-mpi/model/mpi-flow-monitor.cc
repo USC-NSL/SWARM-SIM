@@ -7,8 +7,6 @@
 #include <fstream>
 #include <sstream>
 
-#define PERIODIC_CHECK_INTERVAL (Seconds(1))
-
 namespace ns3
 {
 
@@ -36,26 +34,6 @@ MpiFlowMonitor::GetTypeId()
                           TimeValue(Seconds(0.0)),
                           MakeTimeAccessor(&MpiFlowMonitor::Start),
                           MakeTimeChecker())
-            .AddAttribute("DelayBinWidth",
-                          ("The width used in the delay histogram."),
-                          DoubleValue(0.001),
-                          MakeDoubleAccessor(&MpiFlowMonitor::m_delayBinWidth),
-                          MakeDoubleChecker<double>())
-            .AddAttribute("JitterBinWidth",
-                          ("The width used in the jitter histogram."),
-                          DoubleValue(0.001),
-                          MakeDoubleAccessor(&MpiFlowMonitor::m_jitterBinWidth),
-                          MakeDoubleChecker<double>())
-            .AddAttribute("PacketSizeBinWidth",
-                          ("The width used in the packetSize histogram."),
-                          DoubleValue(20),
-                          MakeDoubleAccessor(&MpiFlowMonitor::m_packetSizeBinWidth),
-                          MakeDoubleChecker<double>())
-            .AddAttribute("FlowInterruptionsBinWidth",
-                          ("The width used in the flowInterruptions histogram."),
-                          DoubleValue(0.250),
-                          MakeDoubleAccessor(&MpiFlowMonitor::m_flowInterruptionsBinWidth),
-                          MakeDoubleChecker<double>())
             .AddAttribute(
                 "FlowInterruptionsMinTime",
                 ("The minimum inter-arrival time that is considered a flow interruption."),
@@ -104,19 +82,10 @@ MpiFlowMonitor::GetStatsForFlow(FlowId flowId)
     if (iter == m_flowStats.end())
     {
         MpiFlowMonitor::FlowStats& ref = m_flowStats[flowId];
-        ref.delaySum = Seconds(0);
-        ref.jitterSum = Seconds(0);
-        ref.lastDelay = Seconds(0);
         ref.txBytes = 0;
         ref.rxBytes = 0;
         ref.txPackets = 0;
         ref.rxPackets = 0;
-        ref.lostPackets = 0;
-        ref.timesForwarded = 0;
-        ref.delayHistogram.SetDefaultBinWidth(m_delayBinWidth);
-        ref.jitterHistogram.SetDefaultBinWidth(m_jitterBinWidth);
-        ref.packetSizeHistogram.SetDefaultBinWidth(m_packetSizeBinWidth);
-        ref.flowInterruptionsHistogram.SetDefaultBinWidth(m_flowInterruptionsBinWidth);
         return ref;
     }
     else
@@ -141,7 +110,6 @@ MpiFlowMonitor::ReportFirstTx(Ptr<MpiFlowProbe> probe,
     TrackedPacket& tracked = m_trackedPackets[std::make_pair(flowId, packetId)];
     tracked.firstSeenTime = now;
     tracked.lastSeenTime = tracked.firstSeenTime;
-    tracked.timesForwarded = 0;
     NS_LOG_INFO("ReportFirstTx: adding tracked packet (flowId=" << flowId << ", packetId="
                                                                  << packetId << ").");
 
@@ -190,44 +158,18 @@ MpiFlowMonitor::ReportLastRx(
     probe->AddPacketStats(flowId, packetSize, delay);
 
     FlowStats& stats = GetStatsForFlow(flowId);
-    stats.delaySum += delay;
-    stats.delayHistogram.AddValue(delay.GetSeconds());
 
     if (stats.timeFirstTxPacket.ToInteger(Time::GetResolution()) == 0)
         stats.timeFirstTxPacket = Time::FromInteger(tStart, Time::GetResolution());
 
-    if (stats.rxPackets > 0)
-    {
-        Time jitter = stats.lastDelay - delay;
-        if (jitter > Seconds(0))
-        {
-            stats.jitterSum += jitter;
-            stats.jitterHistogram.AddValue(jitter.GetSeconds());
-        }
-        else
-        {
-            stats.jitterSum -= jitter;
-            stats.jitterHistogram.AddValue(-jitter.GetSeconds());
-        }
-    }
-    stats.lastDelay = delay;
 
     stats.rxBytes += packetSize;
-    stats.packetSizeHistogram.AddValue((double)packetSize);
     stats.rxPackets++;
     if (stats.rxPackets == 1)
     {
         stats.timeFirstRxPacket = now;
     }
-    else
-    {
-        // measure possible flow interruptions
-        Time interArrivalTime = now - stats.timeLastRxPacket;
-        if (interArrivalTime > m_flowInterruptionsMinTime)
-        {
-            stats.flowInterruptionsHistogram.AddValue(interArrivalTime.GetSeconds());
-        }
-    }
+
     stats.timeLastRxPacket = now;
 
     NS_LOG_DEBUG("ReportLastTx: removing tracked packet (flowId=" << flowId << ", packetId="
@@ -256,7 +198,6 @@ MpiFlowMonitor::ReportDrop(
     probe->AddPacketDropStats(flowId, packetSize, reasonCode);
 
     FlowStats& stats = GetStatsForFlow(flowId);
-    stats.lostPackets++;
     if (stats.packetsDropped.size() < reasonCode + 1)
     {
         stats.packetsDropped.resize(reasonCode + 1, 0);
@@ -285,48 +226,9 @@ MpiFlowMonitor::GetFlowStats() const
 }
 
 void
-MpiFlowMonitor::CheckForLostPackets(Time maxDelay)
-{
-    NS_LOG_FUNCTION(this << maxDelay.As(Time::S));
-    Time now = Simulator::Now();
-
-    for (auto iter = m_trackedPackets.begin(); iter != m_trackedPackets.end();)
-    {
-        if (now - iter->second.lastSeenTime >= maxDelay)
-        {
-            // packet is considered lost, add it to the loss statistics
-            auto flow = m_flowStats.find(iter->first.first);
-            NS_ASSERT(flow != m_flowStats.end());
-            flow->second.lostPackets++;
-
-            // we won't track it anymore
-            m_trackedPackets.erase(iter++);
-        }
-        else
-        {
-            iter++;
-        }
-    }
-}
-
-void
-MpiFlowMonitor::CheckForLostPackets()
-{
-    CheckForLostPackets(m_maxPerHopDelay);
-}
-
-void
-MpiFlowMonitor::PeriodicCheckForLostPackets()
-{
-    CheckForLostPackets();
-    Simulator::Schedule(PERIODIC_CHECK_INTERVAL, &MpiFlowMonitor::PeriodicCheckForLostPackets, this);
-}
-
-void
 MpiFlowMonitor::NotifyConstructionCompleted()
 {
     Object::NotifyConstructionCompleted();
-    // Simulator::Schedule(PERIODIC_CHECK_INTERVAL, &MpiFlowMonitor::PeriodicCheckForLostPackets, this);
 }
 
 void
@@ -386,7 +288,6 @@ MpiFlowMonitor::StopRightNow()
         return;
     }
     m_enabled = false;
-    // CheckForLostPackets();
 }
 
 void
@@ -403,7 +304,6 @@ MpiFlowMonitor::SerializeToXmlStream(
     bool enableProbes)
 {
     NS_LOG_FUNCTION(this << indent << enableHistograms << enableProbes);
-    CheckForLostPackets();
 
     os << std::string(indent, ' ') << "<FlowMonitor>\n";
     indent += 2;
@@ -419,10 +319,9 @@ MpiFlowMonitor::SerializeToXmlStream(
 #define ATTRIB_TIME(name) << " " #name "=\"" << flowI->second.name.As(Time::NS) << "\""
         os << "<Flow flowId=\"" << flowI->first
            << "\"" ATTRIB_TIME(timeFirstTxPacket) ATTRIB_TIME(timeFirstRxPacket)
-                  ATTRIB_TIME(timeLastTxPacket) ATTRIB_TIME(timeLastRxPacket) ATTRIB_TIME(delaySum)
-                      ATTRIB_TIME(jitterSum) ATTRIB_TIME(lastDelay) ATTRIB(txBytes) ATTRIB(rxBytes)
-                          ATTRIB(txPackets) ATTRIB(rxPackets) ATTRIB(lostPackets)
-                              ATTRIB(timesForwarded)
+                  ATTRIB_TIME(timeLastTxPacket) ATTRIB_TIME(timeLastRxPacket) 
+                       ATTRIB(txBytes) ATTRIB(rxBytes)
+                          ATTRIB(txPackets) ATTRIB(rxPackets)
            << ">\n";
 #undef ATTRIB_TIME
 #undef ATTRIB
@@ -440,18 +339,6 @@ MpiFlowMonitor::SerializeToXmlStream(
             os << std::string(indent, ' ');
             os << "<bytesDropped reasonCode=\"" << reasonCode << "\""
                << " bytes=\"" << flowI->second.bytesDropped[reasonCode] << "\" />\n";
-        }
-        if (enableHistograms)
-        {
-            flowI->second.delayHistogram.SerializeToXmlStream(os, indent, "delayHistogram");
-            flowI->second.jitterHistogram.SerializeToXmlStream(os, indent, "jitterHistogram");
-            flowI->second.packetSizeHistogram.SerializeToXmlStream(os,
-                                                                   indent,
-                                                                   "packetSizeHistogram");
-            flowI->second.flowInterruptionsHistogram.SerializeToXmlStream(
-                os,
-                indent,
-                "flowInterruptionsHistogram");
         }
         indent -= 2;
 
@@ -518,22 +405,12 @@ MpiFlowMonitor::ResetAllStats()
     for (auto& iter : m_flowStats)
     {
         auto& flowStat = iter.second;
-        flowStat.delaySum = Seconds(0);
-        flowStat.jitterSum = Seconds(0);
-        flowStat.lastDelay = Seconds(0);
         flowStat.txBytes = 0;
         flowStat.rxBytes = 0;
         flowStat.txPackets = 0;
         flowStat.rxPackets = 0;
-        flowStat.lostPackets = 0;
-        flowStat.timesForwarded = 0;
         flowStat.bytesDropped.clear();
         flowStat.packetsDropped.clear();
-
-        flowStat.delayHistogram.Clear();
-        flowStat.jitterHistogram.Clear();
-        flowStat.packetSizeHistogram.Clear();
-        flowStat.flowInterruptionsHistogram.Clear();
     }
 }
 
