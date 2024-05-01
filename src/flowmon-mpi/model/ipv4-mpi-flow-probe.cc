@@ -8,6 +8,7 @@
 #include "ns3/node.h"
 #include "ns3/packet.h"
 #include "ns3/pointer.h"
+#include "ns3/tcp-header.h"
 
 namespace ns3
 {
@@ -290,6 +291,12 @@ Ipv4MpiFlowProbe::ForwardUpLogger(
 {   
     Ipv4MpiFlowProbeTag fTag;
     bool found = ipPayload->FindFirstMatchingByteTag(fTag);
+
+    TcpHeader tcpHeader;
+    ipPayload->PeekHeader(tcpHeader);
+
+    if (tcpHeader.GetSourcePort() == Ipv4MpiFlowClassifier :: GetSourcePortToFilter())
+        return;
 
     if (found)
     {

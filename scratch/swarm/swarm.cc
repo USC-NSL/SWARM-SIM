@@ -2,6 +2,7 @@
 #include <thread>
 #include <sys/stat.h>
 #include "swarm.h"
+#include "ns3/single-flow-helper.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/mpi-flow-monitor-helper.h"
 
@@ -55,20 +56,25 @@ void ClosTopology :: createTopology() {
     /**
      * In a Clos topology with `n` pods, created with switches of radix `r`:
      *  - The aggregates will reserve `r/2` uplinks to the core, and the core should be 
-     *    at least `r` switches, interleaved between each aggregate.
-     *    We assume that we have exactly `r` core switches from now on for simplicity.
+     *    at least `n * r / 4` switches, interleaved between each aggregate.
+     *    We assume that we have exactly `r^2/4` core switches from now on for simplicity.
      * -  The aggregate to edge per pod, should be a bipartite graph K_{r/2},{r/2}/
      * -  The edge will have `r/2` ports left to serve the hosts, although we allow the number
      *    to be variable.
      *    With links having the exact same characteristics, this means that if `numServers` is
      *    more than `r/2`, the topology would be oversubscribed.
-     * -  Similarly, we can also only serve at most `r` pods, we won't allow any more than that.
+     * -  Similarly, we can also only serve at most `r` pods, we won't allow any more than that,
+     *    since at that point this is no longer a Clos topology.
      * 
-     * So in total, we will have `r` core switches, serving `2.r` pods, each containing `r`
-     * switches. The number of aggregates would be `2.r.r/2 = r^2` and the same for edges.
+     * So in total, we will have `r^2/4` core switches, serving `r` pods at most, each containing `r`
+     * switches. The number of aggregates would be `r.r/2 = r^2/2` and the same for edges.
      * 
      * When MPI is used, we will put all nodes belonging to the same pod in the same LP, and we
      * will interleave the core nodes independently.
+     * 
+     * If super-mpi is to be used, then each pod would be split in half, to be run on 2 MPI
+     * proceses, so in the first case, for `n` pods, there will be at most `n` MPI processes
+     * or `2*n` with super-mpi. Note that super-mpi is much more memory hungry. 
     */
 
     #if MPI_ENABLED
@@ -79,10 +85,25 @@ void ClosTopology :: createTopology() {
     #endif /* MPI_ENABLED */
     
     // We separate aggregate and edges for each pod for easier linking
-    uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+    uint32_t numAggAndEdgeSwitchesPerPod = this->params.switchRadix / 2;
+
+    if (param_super_mpi)
+        NS_ASSERT(this->params.switchRadix % 4 == 0);
+
     for (uint32_t i = 0; i < this->params.numPods; i++) {
-        this->aggSwitches.push_back(NodeContainer(numAggAndEdgeeSwitchesPerPod, (i % systemCount)));
-        this->edgeSwitches.push_back(NodeContainer(numAggAndEdgeeSwitchesPerPod, (i % systemCount)));
+        if (param_super_mpi) {
+            NodeContainer aggs, edges;
+            aggs.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i) % systemCount)));
+            edges.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i) % systemCount)));
+            aggs.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i + 1) % systemCount)));
+            edges.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i + 1) % systemCount)));
+            this->aggSwitches.push_back(aggs);
+            this->edgeSwitches.push_back(edges);
+        }
+        else {
+            this->aggSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod, i % systemCount));
+            this->edgeSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod, i % systemCount));
+        }
     }
 
     // Create servers
@@ -92,8 +113,8 @@ void ClosTopology :: createTopology() {
     InternetStackHelper internet;
     internet.Install(coreSwitches);
     for (uint32_t i = 0; i < this->params.numPods; i++) {
-        for (uint32_t j = 0; j < numAggAndEdgeeSwitchesPerPod; j++) {
-            internet.Install(this->servers[i * numAggAndEdgeeSwitchesPerPod + j]);
+        for (uint32_t j = 0; j < numAggAndEdgeSwitchesPerPod; j++) {
+            internet.Install(this->servers[i * numAggAndEdgeSwitchesPerPod + j]);
         }
     }
     this->installWcmpStack();
@@ -161,10 +182,20 @@ void ClosTopology :: createServers() {
 
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
-            SWARM_DEBG("Creating servers for edge index " << edge_idx << " in pod "
-                << pod_num << " with system ID " << pod_num % systemCount);
-            NodeContainer edgeServers(this->params.numServers, (pod_num % systemCount));
-            this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
+            if (param_super_mpi) {
+                if (edge_idx < numAggAndEdgeeSwitchesPerPod / 2) {
+                    NodeContainer edgeServers(this->params.numServers, ((2 * pod_num) % systemCount));
+                    this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
+                }
+                else {
+                    NodeContainer edgeServers(this->params.numServers, ((2 * pod_num + 1) % systemCount));
+                    this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
+                }
+            }
+            else {
+                NodeContainer edgeServers(this->params.numServers, (pod_num % systemCount));
+                this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
+            }
 
             for (uint32_t i = 0; i < this->params.numServers; i++) {
                 this->serverApplications.push_back(ApplicationContainer());
@@ -589,39 +620,6 @@ void ClosTopology :: restoreStaticRoutesCore(uint32_t core_idx) {
 
 #if NETANIM_ENABLED
 
-// typedef struct color_t {
-//     uint8_t r, g, b;
-// } color;
-
-// inline void getColor(uint32_t idx, color *node_color) {
-//     switch (idx)
-//     {
-//     case 0:
-//         node_color->r=255;
-//         node_color->g=0;
-//         node_color->b=0;
-//         break;
-//     case 1:
-//         node_color->r=0;
-//         node_color->g=255;
-//         node_color->b=0;
-//         break;
-//     case 2:
-//         node_color->r=0;
-//         node_color->g=0;
-//         node_color->b=255;
-//         break;
-//     case 3:
-//         node_color->r=255;
-//         node_color->g=0;
-//         node_color->b=255;
-//         break;
-    
-//     default:
-//         break;
-//     }
-// }
-
 void ClosTopology :: setNodeCoordinates() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
@@ -989,14 +987,12 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     Ptr<Node> ptr;
 
     if ((ptr = topo->getLocalHost(flow->src))) {
-        OnOffHelper onOffClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
+        SingleFlowHelper singleFlowClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
 
-        onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-        onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
-        onOffClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        onOffClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
-        onOffClient.SetAttribute("MaxBytes", UintegerValue(flow->size));
-        onOffClient.Install(ptr).Start(Time(0));
+        singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
+        singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
+        singleFlowClient.Install(ptr).Start(Time(0));
     }
 }
 
@@ -1058,6 +1054,8 @@ void reportFlowProgress(FlowScheduler *flowScheduler) {
     }
     else {
         std::clog << std::endl;
+        SWARM_INFO("All flows have been loaded, switching to simulation time reports");
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, param_end);
     }
 }
 
@@ -1066,7 +1064,8 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         return;
     
     if (flowSCheduler)
-        Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
+        // Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
     else
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
@@ -1105,11 +1104,13 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("monitor", "Install FlowMonitor on the network", param_monitor);
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
     cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
+    cmd.AddValue("noAcks", "Do not monitor ACKs", param_no_acks);
     cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
     cmd.AddValue("out", "Flow Monitor output prefix name", FLOW_FILE_PREFIX);
     
     #if MPI_ENABLED
     cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
+    cmd.AddValue("superMpi", "Enable super MPI", param_super_mpi);
     #endif /* MPI_ENABLED */
 
     #if NETANIM_ENABLED
@@ -1122,6 +1123,11 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("verbose", "Enable debug log outputs", param_verbose);
 
     cmd.Parse(argc, argv);
+
+    #if MPI_ENABLED
+    if (param_super_mpi)
+        topo_params->mpi = true;
+    #endif
 }
 
 uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params) {
@@ -1132,6 +1138,10 @@ uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo
 
         systemId = MpiInterface::GetSystemId();
         systemCount = MpiInterface::GetSize();
+
+        SWARM_INFO("MPI enabled, with total system count of " << systemCount);
+        if (param_super_mpi)
+            SWARM_WARN("Super-MPI has been enabled, the simulation will use a lot of memory!");
     }
     #endif /* MPI_ENABLED */
 
@@ -1174,6 +1184,8 @@ void setupClosTopology(ClosTopology *nodes) {
         SWARM_INFO("Enabling intra-pod backup routes");
         nodes->enableAggregateBackupPaths();
     }
+
+    nodes->printSystemIds();
 }
 
 template<typename T> 
@@ -1267,8 +1279,12 @@ int main(int argc, char *argv[]) {
     SWARM_SET_LOG_LEVEL(INFO);
 
     // ns3::RngSeedManager::SetSeed(123456789);
-    NS_OBJECT_ENSURE_REGISTERED(ErrorModel);
-    NS_OBJECT_ENSURE_REGISTERED(RateErrorModel);
+
+    /**
+     * TODO: Why in the holly names on earth, do we even need to do this ???????
+     *       Where does MPI add this thing ??????
+    */
+    NS_OBJECT_ENSURE_REGISTERED(SocketIpv6TclassTag);
 
     parseCmd(argc, argv, &topo_params);
 
@@ -1291,6 +1307,8 @@ int main(int argc, char *argv[]) {
     // Setup FlowMonitor and begin the experiment
     #if MPI_ENABLED
     MpiFlowMonitorHelper::SetSystemId(systemId);
+    if (param_no_acks)
+        MpiFlowMonitorHelper::SetSourcePortToFilter(TCP_DISCARD_PORT);
 
     if (topo_params.mpi) {
         setupMonitoringAndBeingExperiment<MpiFlowMonitorHelper>(

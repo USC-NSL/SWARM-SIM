@@ -33,11 +33,9 @@ class Ipv4MpiFlowProbeTag : public Tag
                      uint32_t packetSize,
                      Ipv4Address src,
                      Ipv4Address dst,
-                     
                      uint64_t tStart,
-                     uint64_t tLasttRx
+                     uint64_t tLasttRx);
                      
-                     );
     void SetFlowId(uint32_t flowId);
     void SetPacketId(uint32_t packetId);
     void SetPacketSize(uint32_t packetSize);

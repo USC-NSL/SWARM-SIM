@@ -1,7 +1,7 @@
 .PHONY: copy check clean purge configure test
 
 # To speedup builds, we only enable what we need
-INCLUDE_MODULES_MIN = point-to-point;applications;wcmp;internet;flow-monitor
+INCLUDE_MODULES_MIN = point-to-point;applications;wcmp;internet;flow-monitor;single-flow-application
 INCLUDE_MODULES_MPI = $(INCLUDE_MODULES_MIN);mpi;flowmon-mpi
 INCLUDE_MODULES_NETANIM = $(INCLUDE_MODULES_MIN);netanim
 INCLUDE_MODULES_ALL = $(INCLUDE_MODULES_MIN);netanim;mpi;flowmon-mpi

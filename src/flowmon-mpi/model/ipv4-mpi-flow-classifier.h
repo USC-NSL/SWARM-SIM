@@ -2,7 +2,7 @@
 #define IPV4_MPI_FLOW_CLASSIFIER_H
 
 #include "mpi-flow-classifier.h"
-
+#include "ns3/nstime.h"
 #include "ns3/ipv4-header.h"
 
 #include <map>
@@ -16,6 +16,16 @@ class Packet;
 class Ipv4MpiFlowClassifier : public MpiFlowClassifier
 {
   public:
+    static uint16_t m_sourcePortToFilter;
+
+    static void SetSourcePortToFilter(uint16_t port) {
+      Ipv4MpiFlowClassifier :: m_sourcePortToFilter = port;
+    }
+
+    static uint16_t GetSourcePortToFilter() {
+      return Ipv4MpiFlowClassifier :: m_sourcePortToFilter;
+    }
+
     /// Structure to classify a packet
     struct FiveTuple
     {

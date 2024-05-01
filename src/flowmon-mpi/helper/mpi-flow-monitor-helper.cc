@@ -2,7 +2,6 @@
 
 #include "ns3/mpi-flow-monitor.h"
 #include "ns3/ipv4-mpi-flow-classifier.h"
-#include "ns3/ipv4-mpi-flow-probe.h"
 #include "ns3/ipv4-l3-protocol.h"
 #include "ns3/ipv6-l3-protocol.h"
 #include "ns3/node-list.h"

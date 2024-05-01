@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 1
+#define NETANIM_ENABLED 0
 #endif
 
 #include "scenario_parser.h"
@@ -122,7 +122,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 #define UDP_PACKET_SIZE_SMALL 64
 #define TCP_PACKET_SIZE 1024
 
-#define TICK_PROGRESS_EVERY_WHAT_PERCENT 1
+#define TICK_PROGRESS_EVERY_WHAT_PERCENT 0.1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
 #define PROGRESS_BAR_WIDTH 70
 
@@ -163,9 +163,32 @@ ns3::if_up_down_func wcmp_if_down_func;
 ns3::if_up_down_func wcmp_if_up_func;
 
 /**
- * Host flwo dispatcher
+ * Host flow dispatcher
 */
 host_flow_dispatcher host_flow_dispatcher_function;
+
+/************************************
+ *  Simulation inputs
+************************************/
+
+double param_end = 4.0;                       // When simulation ends in seconds
+
+std::string param_flow_file_path = "";        // Path to traffic file
+std::string param_scneario_file_path = "";    // Path to scenario file
+std::string param_screamRate = "";            // Rate of All-to-All TCP scream
+
+bool param_micro = false;                     // Use micro-seconds time resolution
+bool param_verbose = false;                   // Enable SWARM_DEBUG outputs
+bool param_monitor = false;                   // Enable FlowMonitor and FCT reporting
+bool param_plain_ecmp = false;                // Do plain ECMP
+bool param_use_cache = false;                 // Use ECMP/WCMP cache
+bool param_no_acks = false;                   // Do not monitor ACK flows
+
+#if MPI_ENABLED
+bool param_super_mpi = false;                 // Whether or not to use super-mpi
+#endif
+
+std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
 
 /**
  * This class will keep the topology node containers
@@ -378,7 +401,7 @@ class ClosTopology {
         }
 
         void installTcpPacketSinks() {            
-            for (uint32_t idx = 0; idx < this->serverApplications.size(); idx++) {
+            for (uint32_t idx = 0; idx < this->params.numPods * this->params.numServers * this->params.switchRadix / 2; idx++) {
                 ns3::Ptr<ns3::Node> ptr = this->getLocalHost(idx);
                 if (!ptr)
                     continue;
@@ -398,8 +421,15 @@ class ClosTopology {
 
         uint32_t getSystemIdOfServer(uint32_t host_idx) const {
             uint32_t edge_idx = host_idx / this->params.numServers;
+            std::pair<uint32_t, uint32_t> podAndIndex = getPodAndIndex(edge_idx);
 
-            return getPodAndIndex(edge_idx).first % systemCount;
+            if (param_super_mpi) {
+                if (podAndIndex.second < this->params.switchRadix / 4)
+                    return (2 * podAndIndex.first) % systemCount;
+                return (2 * podAndIndex.first + 1) % systemCount;
+            }
+
+            return podAndIndex.first % systemCount;
         }
 
         uint16_t getNextPort(uint32_t host_idx) {
@@ -419,25 +449,43 @@ class ClosTopology {
             uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
             addHostToPortMap(host_idx);
         }
+
+        void printSystemIds() {
+            SWARM_DEBG("Printing topology system identifiers");
+            SWARM_DEBG("We have " << this->coreSwitches.GetN() << " core swithces");
+            for (uint32_t i = 0; i < this->coreSwitches.GetN(); i++) {
+                SWARM_DEBG("Core " << i << ": " << this->coreSwitches.Get(i)->GetSystemId());
+            }
+
+            SWARM_DEBG("We have " << this->aggSwitches.size() << " pods, each with "
+                << this->aggSwitches[0].GetN() << " aggregate switches");
+            for (uint32_t i = 0; i < this->aggSwitches.size(); i++) {
+                for (uint32_t j = 0; j < this->aggSwitches[i].GetN(); j++) {
+                    SWARM_DEBG("Aggregate in pod " << i << " and index " << j << " (full index: " 
+                        << (this->params.switchRadix/2 * i + j) << "): " << this->aggSwitches[i].Get(j)->GetSystemId());
+                }
+            }
+
+            SWARM_DEBG("We have " << this->edgeSwitches.size() << " pods, each with "
+                << this->edgeSwitches[0].GetN() << " edge switches");
+            for (uint32_t i = 0; i < this->edgeSwitches.size(); i++) {
+                for (uint32_t j = 0; j < this->edgeSwitches[i].GetN(); j++) {
+                    SWARM_DEBG("Edge in pod " << i << " and index " << j << " (full index: " 
+                        << (this->params.switchRadix/2 * i + j) << "): " << this->edgeSwitches[i].Get(j)->GetSystemId());
+                }
+            }
+
+            SWARM_DEBG("We have " << this->servers.size() << " ToRs, each with "
+                << this->servers[0].GetN() << " servers");
+            for (uint32_t i = 0; i < this->servers.size(); i++) {
+                for (uint32_t j = 0; j < this->servers[i].GetN(); j++) {
+                    SWARM_DEBG("Server under ToR " << i << " and index " << j << " (full index: " 
+                        << (this->params.numServers * i + j) << "): " << this->servers[i].Get(j)->GetSystemId()
+                        << " vs " << getSystemIdOfServer(this->params.numServers * i + j));
+                }
+            }
+        }
 };
-
-/************************************
- *  Simulation inputs
-************************************/
-
-double param_end = 4.0;                       // When simulation ends in seconds
-
-std::string param_flow_file_path = "";        // Path to traffic file
-std::string param_scneario_file_path = "";    // Path to scenario file
-std::string param_screamRate = "";            // Rate of All-to-All TCP scream
-
-bool param_micro = false;                     // Use micro-seconds time resolution
-bool param_verbose = false;                   // Enable SWARM_DEBUG outputs
-bool param_monitor = false;                   // Enable FlowMonitor and FCT reporting
-bool param_plain_ecmp = false;                // Do plain ECMP
-bool param_use_cache = false;                 // Use ECMP/WCMP cache
-
-std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
 
 /************************************
  * Function pointer typedefs
