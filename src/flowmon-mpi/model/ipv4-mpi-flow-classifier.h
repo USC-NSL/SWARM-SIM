@@ -17,6 +17,7 @@ class Ipv4MpiFlowClassifier : public MpiFlowClassifier
 {
   public:
     static uint16_t m_sourcePortToFilter;
+    static Time m_monitorUntil;
 
     static void SetSourcePortToFilter(uint16_t port) {
       Ipv4MpiFlowClassifier :: m_sourcePortToFilter = port;
@@ -24,6 +25,14 @@ class Ipv4MpiFlowClassifier : public MpiFlowClassifier
 
     static uint16_t GetSourcePortToFilter() {
       return Ipv4MpiFlowClassifier :: m_sourcePortToFilter;
+    }
+
+    static void SetMonitorUntil(double when) {
+      Ipv4MpiFlowClassifier :: m_monitorUntil = Seconds(when);
+    }
+
+    static Time GetMonitorUntil() {
+      return Ipv4MpiFlowClassifier :: m_monitorUntil;
     }
 
     /// Structure to classify a packet

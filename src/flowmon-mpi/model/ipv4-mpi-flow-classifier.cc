@@ -15,6 +15,7 @@ const uint8_t TCP_PROT_NUMBER = 6;  //!< TCP Protocol number
 const uint8_t UDP_PROT_NUMBER = 17; //!< UDP Protocol number
 
 uint16_t Ipv4MpiFlowClassifier :: m_sourcePortToFilter;
+Time Ipv4MpiFlowClassifier :: m_monitorUntil = Seconds(MAXFLOAT);
 
 bool
 operator<(const Ipv4MpiFlowClassifier::FiveTuple& t1, const Ipv4MpiFlowClassifier::FiveTuple& t2)
@@ -132,6 +133,11 @@ Ipv4MpiFlowClassifier::Classify(
     // Ignore source ports ...
     if (srcPort == Ipv4MpiFlowClassifier :: GetSourcePortToFilter())
         return false;
+
+    if (!m_flowMap.count(tuple) && (Simulator::Now() > GetMonitorUntil())) {
+        // No longer need to monitor this!
+        return false;
+    }
 
     // try to insert the tuple, but check if it already exists
     auto insert = m_flowMap.insert(std::pair<FiveTuple, FlowId>(tuple, 0));

@@ -1107,6 +1107,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("noAcks", "Do not monitor ACKs", param_no_acks);
     cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
     cmd.AddValue("out", "Flow Monitor output prefix name", FLOW_FILE_PREFIX);
+    cmd.AddValue("until", "When to stop monitoring new flows", param_monitor_until);
     
     #if MPI_ENABLED
     cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
@@ -1307,8 +1308,12 @@ int main(int argc, char *argv[]) {
     // Setup FlowMonitor and begin the experiment
     #if MPI_ENABLED
     MpiFlowMonitorHelper::SetSystemId(systemId);
+    
     if (param_no_acks)
         MpiFlowMonitorHelper::SetSourcePortToFilter(TCP_DISCARD_PORT);
+
+    if (param_monitor_until)
+        MpiFlowMonitorHelper::SetMonitorUntil(param_monitor_until + APPLICATION_START_TIME);
 
     if (topo_params.mpi) {
         setupMonitoringAndBeingExperiment<MpiFlowMonitorHelper>(

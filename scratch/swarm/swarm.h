@@ -172,6 +172,7 @@ host_flow_dispatcher host_flow_dispatcher_function;
 ************************************/
 
 double param_end = 4.0;                       // When simulation ends in seconds
+double param_monitor_until = 3.0;             // When to stop monitoring new flows?
 
 std::string param_flow_file_path = "";        // Path to traffic file
 std::string param_scneario_file_path = "";    // Path to scenario file

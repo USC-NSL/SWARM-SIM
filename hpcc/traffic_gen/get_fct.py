@@ -29,8 +29,7 @@ NUM_SERVERS = 2
 TCP_DST_PORT = 10
 NO_ACKS = False
 
-T_START = 1.333
-T_FINISH = 1.667
+T_START = 1.0
 
 
 def map_ip_to_host_idx(ip):
@@ -124,7 +123,7 @@ class FlowMonitorXmlParser:
         print(f"Results for {self.paths[0]}")
         print(f"Parsed {len(self.fcts)} flows")
         print(f"Flows between {self.min_start_tx} and {self.max_last_rx}")
-        print(f"FCT p99 is {np.percentile([1000 * elem[1] for elem in self.fcts.values()], 98)}")
+        print(f"FCT p99 is {np.percentile([1000 * elem[1] for elem in self.fcts.values()], 99)}")
     
     @staticmethod
     def plot_cdf(fcts, log_scale=True):
@@ -178,7 +177,7 @@ class FlowMonitorXmlParser:
                         t_start = self.parse_time_ns(attrib['timeFirstTxPacket']) * 1e-9
                         t_finish = self.parse_time_ns(attrib['timeLastRxPacket']) * 1e-9
 
-                        if t_start < T_FINISH and t_start >= T_START:
+                        if t_start >= T_START:
                             self.fcts[int(attrib['flowId'])] = (
                                 int(attrib['rxBytes']),
                                 (t_finish - t_start)
