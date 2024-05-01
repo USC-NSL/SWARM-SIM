@@ -67,14 +67,17 @@ FlowScheduler :: dispatchAndSchedule() {
             Seconds(m_current_flow.t_arrival) - Simulator::Now(),
             &FlowScheduler::dispatchAndSchedule, this
         );
-    else
+    else {
         m_flow_file_stream.close();
+        m_enabled = false;
+    }
 }
 
 void
 FlowScheduler :: readFlowFile() {
     m_flow_file_stream.open(m_flow_file_path);
     m_flow_file_stream >> num_flows;
+    m_enabled = true;
 
     // SWARM_INFO("Reading flow file at " << m_flow_file_path << " with " << num_flows << " flows");
 }
@@ -86,4 +89,10 @@ FlowScheduler :: begin() {
         Seconds(m_current_flow.t_arrival) - Simulator::Now(),
         &FlowScheduler::dispatchAndSchedule, this
     );
+}
+
+void
+FlowScheduler :: close() {
+    if (m_enabled)
+        m_flow_file_stream.close();
 }

@@ -25,6 +25,7 @@ class FlowScheduler {
         const char *m_flow_file_path;
         ifstream m_flow_file_stream;
         host_flow m_current_flow = {0};
+        bool m_enabled = false;
 
         /**
          * A migration, is another host sending some other hosts traffic on behalf of them.
@@ -61,6 +62,8 @@ class FlowScheduler {
         FlowScheduler(string flow_file, host_flow_dispatcher dispatcher);
 
         void begin();
+        void close();
+        
         void setDispatcher(host_flow_dispatcher dispatcher) {
             m_dispatcher = dispatcher;
         }

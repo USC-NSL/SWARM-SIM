@@ -13,7 +13,7 @@
 #endif
 // Use Netanim
 #ifndef NETANIM_ENABLED
-#define NETANIM_ENABLED 0
+#define NETANIM_ENABLED 1
 #endif
 
 #include "scenario_parser.h"
@@ -311,7 +311,7 @@ class ClosTopology {
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
-        void doAllToAllTcp(uint32_t totalNumberOfServers, string scream_rate);
+        void doAllToAllTcp(uint32_t totalNumberOfServers, const string scream_rate);
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];

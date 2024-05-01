@@ -701,20 +701,25 @@ void ClosTopology :: setNodeCoordinates() {
 
 void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval) {
     Ptr<Node> ptr;
+    static uint32_t port = UDP_DISCARD_PORT;
     
     if ((ptr = this->getLocalHost(server_host))) {
-        UdpEchoServerHelper echoServer(UDP_DISCARD_PORT);
+        UdpEchoServerHelper echoServer(port);
+        ptr = getHost(server_host);
         this->serverApplications[server_host].Add(echoServer.Install(ptr));
     }
 
     if ((ptr = this->getLocalHost(client_host))) {
-        UdpEchoClientHelper echoClient(this->getServerAddress(server_host), UDP_DISCARD_PORT);
+        UdpEchoClientHelper echoClient(this->getServerAddress(server_host), port);
         echoClient.SetAttribute("MaxPackets", UintegerValue(1));
         echoClient.SetAttribute("Interval", TimeValue(Seconds(interval)));
         echoClient.SetAttribute("PacketSize", UintegerValue(64));
-        
+
+        ptr = getHost(client_host);
         this->serverApplications[client_host].Add(echoClient.Install(ptr));
     }
+
+    port++;
 }
 
 void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
@@ -762,7 +767,7 @@ void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t
     }
 }
 
-void ClosTopology :: doAllToAllTcp(uint32_t totalNumberOfServers, std::string scream_rate) {
+void ClosTopology :: doAllToAllTcp(uint32_t totalNumberOfServers, const string scream_rate) {
     for (uint32_t i = 0; i < totalNumberOfServers; i++) {
         for (uint32_t j = 0; j < totalNumberOfServers; j++) {
             if (i == j)
@@ -1250,8 +1255,6 @@ void setupMonitoringAndBeingExperiment(
     if (flowScheduler)
         flowScheduler->begin();
 
-    // nodes->echoBetweenHosts(0, totalNumberOfServers-1);
-
     nodes->startApplications(APPLICATION_START_TIME, param_end);
 
     DoReportProgress(param_end, flowScheduler);
@@ -1262,6 +1265,11 @@ void setupMonitoringAndBeingExperiment(
     Simulator::Run();
     Simulator::Destroy();
 
+    if (flowScheduler) {
+        flowScheduler->close();
+        delete flowScheduler;
+    }
+
     auto t_end = std::chrono::system_clock::now();
 
     std::chrono::duration<float> took = t_end - t_start;
@@ -1270,7 +1278,7 @@ void setupMonitoringAndBeingExperiment(
     // Serialize the results
     if (param_monitor) {
         SWARM_INFO("Serializing FCT information into prefix " + flow_output_file_name);
-        flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
+        // flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
     }
 }
 
