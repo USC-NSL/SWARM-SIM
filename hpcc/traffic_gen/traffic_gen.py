@@ -96,8 +96,8 @@ if __name__ == "__main__":
 	customRand = get_cdf_sampler(args.cdf_file)
 
 	# generate flows
-	avg = (customRand.get_avg() * 8)		# Average is in bytes!
-	avg_inter_arrival = (avg / (bandwidth * load)) * 1e9
+	avg = customRand.get_avg()
+	avg_inter_arrival = (avg / (bandwidth * load / 8)) * 1e9
 	n_flow_estimate = int(time / avg_inter_arrival * nhost)
 	n_flow = 0
 

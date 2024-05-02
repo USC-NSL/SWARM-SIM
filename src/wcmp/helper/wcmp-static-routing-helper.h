@@ -25,7 +25,7 @@ class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
         void useCache();
 
     private:
-        ObjectFactory m_factory;
+        // ObjectFactory m_factory;
         level_mapper_func m_func = nullptr;
 };
 

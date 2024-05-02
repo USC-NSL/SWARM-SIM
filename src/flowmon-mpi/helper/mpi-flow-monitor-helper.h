@@ -54,6 +54,10 @@ class MpiFlowMonitorHelper
       Ipv4MpiFlowClassifier :: SetSourcePortToFilter(port);
     }
 
+    static void SetMonitorUntil(double when) {
+      Ipv4MpiFlowClassifier :: SetMonitorUntil(when);
+    }
+
     uint32_t GetSystemId() {
       return MpiFlowMonitorHelper :: m_systemId;
     }

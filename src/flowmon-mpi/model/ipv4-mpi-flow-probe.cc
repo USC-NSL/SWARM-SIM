@@ -317,6 +317,8 @@ Ipv4MpiFlowProbe::ForwardUpLogger(
         m_flowMonitor->ReportLastRx(this, flowId, packetId, size, tStart, tLast);
     }
     else {
+        if (Simulator::Now() > Ipv4MpiFlowClassifier :: GetMonitorUntil())
+            return;
         NS_ABORT_MSG("Not found in forwardUp");
     }
 }

@@ -172,6 +172,7 @@ host_flow_dispatcher host_flow_dispatcher_function;
 ************************************/
 
 double param_end = 4.0;                       // When simulation ends in seconds
+double param_monitor_until = 3.0;             // When to stop monitoring new flows?
 
 std::string param_flow_file_path = "";        // Path to traffic file
 std::string param_scneario_file_path = "";    // Path to scenario file
@@ -185,7 +186,10 @@ bool param_use_cache = false;                 // Use ECMP/WCMP cache
 bool param_no_acks = false;                   // Do not monitor ACK flows
 
 #if MPI_ENABLED
-bool param_super_mpi = false;                 // Whether or not to use super-mpi
+uint32_t param_pod_procs = DEFAULT_NUM_PODS;  // Number of processes for pod
+uint32_t param_core_procs = DEFAULT_NUM_PODS; // Number of processes for core switches
+bool param_offlaod_core = false;              // Use separate processes for cores
+bool param_first_core_0 = true;
 #endif
 
 std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
@@ -310,7 +314,7 @@ class ClosTopology {
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
-        void doAllToAllTcp(uint32_t totalNumberOfServers, string scream_rate);
+        void doAllToAllTcp(uint32_t totalNumberOfServers, const string scream_rate);
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];
@@ -420,16 +424,14 @@ class ClosTopology {
         }
 
         uint32_t getSystemIdOfServer(uint32_t host_idx) const {
+            static uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
+            static uint32_t sysIdStep = 
+                ((numAggAndEdgeeSwitchesPerPod * this->params.numPods) > (param_pod_procs)) ?
+                    ((numAggAndEdgeeSwitchesPerPod * this->params.numPods) / (param_pod_procs)) : 1;
+
             uint32_t edge_idx = host_idx / this->params.numServers;
-            std::pair<uint32_t, uint32_t> podAndIndex = getPodAndIndex(edge_idx);
 
-            if (param_super_mpi) {
-                if (podAndIndex.second < this->params.switchRadix / 4)
-                    return (2 * podAndIndex.first) % systemCount;
-                return (2 * podAndIndex.first + 1) % systemCount;
-            }
-
-            return podAndIndex.first % systemCount;
+            return edge_idx / sysIdStep;
         }
 
         uint16_t getNextPort(uint32_t host_idx) {
