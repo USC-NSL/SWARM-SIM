@@ -189,7 +189,9 @@ bool param_no_acks = false;                   // Do not monitor ACK flows
 uint32_t param_pod_procs = DEFAULT_NUM_PODS;  // Number of processes for pod
 uint32_t param_core_procs = DEFAULT_NUM_PODS; // Number of processes for core switches
 bool param_offlaod_core = false;              // Use separate processes for cores
+bool param_offload_aggs = false;              // Use separate processes for aggregates
 bool param_first_core_0 = true;
+bool param_first_agg_0 = true;
 #endif
 
 std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use

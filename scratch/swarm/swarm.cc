@@ -102,7 +102,11 @@ void ClosTopology :: createTopology() {
     uint32_t numAggAndEdgeSwitchesPerPod = this->params.switchRadix / 2;
 
     uint32_t sysIdCounter = 0;
-    uint32_t sysIdStep = ((numAggAndEdgeSwitchesPerPod * this->params.numPods) / (param_pod_procs));
+    uint32_t sysIdStep = 
+        param_offload_aggs 
+            ? ((numAggAndEdgeSwitchesPerPod * this->params.numPods) / (param_pod_procs / 2)) 
+            : ((numAggAndEdgeSwitchesPerPod * this->params.numPods) / (param_pod_procs));
+
     if (sysIdStep == 0)
         sysIdStep = 1;
 
@@ -110,8 +114,19 @@ void ClosTopology :: createTopology() {
         NodeContainer aggs, edges;
 
         for (uint32_t j = 0; j < numAggAndEdgeSwitchesPerPod; j++) {
-            aggs.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
-            edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+            if (!param_offload_aggs) {
+                aggs.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+                edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+            }
+            else {
+                if (i == 1 && j == 0 && param_first_agg_0) {
+                    aggs.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+                    edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+                    continue;
+                }
+                aggs.Add(CreateObject<Node>((sysIdCounter / sysIdStep) + (param_pod_procs / 2)));
+                edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+            }
             ++sysIdCounter;
         }
 
@@ -1126,6 +1141,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("podLps", "Number of LPs for all pod", param_pod_procs);
     cmd.AddValue("coreLps", "Number of LPs for core switches", param_core_procs);
     cmd.AddValue("offloadCore", "Offload core switches to separate LPs", param_offlaod_core);
+    cmd.AddValue("offloadAgg", "Offload aggregate switches to separate LPs", param_offload_aggs);
     #endif /* MPI_ENABLED */
 
     #if NETANIM_ENABLED
@@ -1153,8 +1169,19 @@ uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo
         SWARM_INFO("Number of LPs for pods: " << param_pod_procs);
         SWARM_INFO("Number of LPs for core switches: " << param_core_procs);
         
-        if (param_offlaod_core) {
+        if (param_offlaod_core && !param_offload_aggs) {
             SWARM_INFO("Core switches will be offloaded");
+            NS_ASSERT(systemCount == (param_core_procs + param_pod_procs));
+        }
+        else if (!param_offlaod_core && param_offload_aggs) {
+            SWARM_INFO("Aggregate switches will be offloaded");
+            NS_ASSERT(
+                (param_pod_procs > param_core_procs ? param_pod_procs : param_core_procs) && 
+                (param_pod_procs % 2 == 0)
+            );
+        }
+        else if (param_offlaod_core && param_offload_aggs) {
+            SWARM_INFO("Both Aggregate and Core switches will be offloaded");
             NS_ASSERT(systemCount == (param_core_procs + param_pod_procs));
         }
         else
