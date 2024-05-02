@@ -45,6 +45,20 @@ void ClosTopology :: createCoreMPI() {
         return;
     }
 
+    if (param_offlaod_core) {
+        // Offload core switches to a different instance
+        NS_ASSERT(systemCount > param_pod_procs);
+        for (uint32_t i = 0; i < numCores; i++) {
+            if (param_first_core_0 && i==0) {
+                this->coreSwitches.Add(CreateObject<Node>(0));
+                continue;
+            }
+            this->coreSwitches.Add(CreateObject<Node>(param_pod_procs + (i % (systemCount - param_pod_procs))));
+        }
+
+        return;
+    }
+
     // For MPI, color cores sequentially
     for (uint32_t i = 0; i < numCores; i++) {
         this->coreSwitches.Add(CreateObject<Node>(i % systemCount));
@@ -87,23 +101,22 @@ void ClosTopology :: createTopology() {
     // We separate aggregate and edges for each pod for easier linking
     uint32_t numAggAndEdgeSwitchesPerPod = this->params.switchRadix / 2;
 
-    if (param_super_mpi)
-        NS_ASSERT(this->params.switchRadix % 4 == 0);
+    uint32_t sysIdCounter = 0;
+    uint32_t sysIdStep = ((numAggAndEdgeSwitchesPerPod * this->params.numPods) / (param_pod_procs));
+    if (sysIdStep == 0)
+        sysIdStep = 1;
 
     for (uint32_t i = 0; i < this->params.numPods; i++) {
-        if (param_super_mpi) {
-            NodeContainer aggs, edges;
-            aggs.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i) % systemCount)));
-            edges.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i) % systemCount)));
-            aggs.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i + 1) % systemCount)));
-            edges.Add(NodeContainer(numAggAndEdgeSwitchesPerPod / 2, ((2*i + 1) % systemCount)));
-            this->aggSwitches.push_back(aggs);
-            this->edgeSwitches.push_back(edges);
+        NodeContainer aggs, edges;
+
+        for (uint32_t j = 0; j < numAggAndEdgeSwitchesPerPod; j++) {
+            aggs.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+            edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+            ++sysIdCounter;
         }
-        else {
-            this->aggSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod, i % systemCount));
-            this->edgeSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod, i % systemCount));
-        }
+
+        this->aggSwitches.push_back(aggs);
+        this->edgeSwitches.push_back(edges);
     }
 
     // Create servers
@@ -180,27 +193,21 @@ void ClosTopology :: createServers() {
     
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
 
+    uint32_t sysIdCounter = 0;
+    uint32_t sysIdStep = ((numAggAndEdgeeSwitchesPerPod * this->params.numPods) / (param_pod_procs));
+    if (sysIdStep == 0)
+        sysIdStep = 1;
+
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
-            if (param_super_mpi) {
-                if (edge_idx < numAggAndEdgeeSwitchesPerPod / 2) {
-                    NodeContainer edgeServers(this->params.numServers, ((2 * pod_num) % systemCount));
-                    this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
-                }
-                else {
-                    NodeContainer edgeServers(this->params.numServers, ((2 * pod_num + 1) % systemCount));
-                    this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
-                }
-            }
-            else {
-                NodeContainer edgeServers(this->params.numServers, (pod_num % systemCount));
-                this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
-            }
+            NodeContainer edgeServers(this->params.numServers, sysIdCounter / sysIdStep);
+            this->servers[pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx] = edgeServers;
 
             for (uint32_t i = 0; i < this->params.numServers; i++) {
                 this->serverApplications.push_back(ApplicationContainer());
                 this->addHostToPortMap(pod_num, edge_idx, i);
             }
+            ++sysIdCounter;
         }
     }
 }
@@ -1069,8 +1076,8 @@ void DoReportProgress(double end, FlowScheduler *flowSCheduler) {
         return;
     
     if (flowSCheduler)
-        Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
-        // Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        Simulator::Schedule(Simulator::Now(), reportFlowProgress, flowSCheduler);
+        // Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
     else
         Simulator::Schedule(Simulator::Now(), reportTimeProgress, end);
 }
@@ -1116,7 +1123,9 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     
     #if MPI_ENABLED
     cmd.AddValue("mpi", "Enable MPI", topo_params->mpi);
-    cmd.AddValue("superMpi", "Enable super MPI", param_super_mpi);
+    cmd.AddValue("podLps", "Number of LPs for all pod", param_pod_procs);
+    cmd.AddValue("coreLps", "Number of LPs for core switches", param_core_procs);
+    cmd.AddValue("offloadCore", "Offload core switches to separate LPs", param_offlaod_core);
     #endif /* MPI_ENABLED */
 
     #if NETANIM_ENABLED
@@ -1129,25 +1138,27 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     cmd.AddValue("verbose", "Enable debug log outputs", param_verbose);
 
     cmd.Parse(argc, argv);
-
-    #if MPI_ENABLED
-    if (param_super_mpi)
-        topo_params->mpi = true;
-    #endif
 }
 
 uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params) {
     #if MPI_ENABLED
     if (topo_params->mpi) {
-        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
         MpiInterface::Enable(&argc, &argv);
 
         systemId = MpiInterface::GetSystemId();
         systemCount = MpiInterface::GetSize();
 
         SWARM_INFO("MPI enabled, with total system count of " << systemCount);
-        if (param_super_mpi)
-            SWARM_WARN("Super-MPI has been enabled, the simulation will use a lot of memory!");
+        SWARM_INFO("Number of LPs for pods: " << param_pod_procs);
+        SWARM_INFO("Number of LPs for core switches: " << param_core_procs);
+        
+        if (param_offlaod_core) {
+            SWARM_INFO("Core switches will be offloaded");
+            NS_ASSERT(systemCount == (param_core_procs + param_pod_procs));
+        }
+        else
+            NS_ASSERT(systemCount == (param_pod_procs > param_core_procs ? param_pod_procs : param_core_procs));
     }
     #endif /* MPI_ENABLED */
 
@@ -1278,7 +1289,7 @@ void setupMonitoringAndBeingExperiment(
     // Serialize the results
     if (param_monitor) {
         SWARM_INFO("Serializing FCT information into prefix " + flow_output_file_name);
-        // flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
+        flowMonitorHelper.SerializeToXmlFile(flow_output_file_name, false, false);
     }
 }
 
@@ -1286,8 +1297,6 @@ int main(int argc, char *argv[]) {
     topolgoy_descriptor topo_params;
 
     SWARM_SET_LOG_LEVEL(INFO);
-
-    // ns3::RngSeedManager::SetSeed(123456789);
 
     /**
      * TODO: Why in the holly names on earth, do we even need to do this ???????
