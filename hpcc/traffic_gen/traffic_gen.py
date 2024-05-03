@@ -84,6 +84,9 @@ if __name__ == "__main__":
 	parser.add_argument("-o", "--output", dest = "output", help = "the output file")
 	args = parser.parse_args()
 
+	if not os.path.exists(GENERATED_DIR):
+		os.mkdir(GENERATED_DIR)
+
 	if args.list:
 		list_cdfs()
 		sys.exit(0)

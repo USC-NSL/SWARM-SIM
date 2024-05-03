@@ -29,7 +29,7 @@ NUM_SERVERS = 2
 TCP_DST_PORT = 10
 NO_ACKS = False
 
-T_START = 1.0
+T_START = 1.5
 
 
 def map_ip_to_host_idx(ip):

@@ -544,7 +544,7 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
     ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
-    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(10000));
+    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(7500));
     ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(10000));
 }
 
