@@ -64,42 +64,16 @@ void ClosTopology :: createCoreMPI() {
         this->coreSwitches.Add(CreateObject<Node>(i % systemCount));
     }
 }
-#endif /* MPI_ENABLED */
 
-void ClosTopology :: createTopology() {
-    /**
-     * In a Clos topology with `n` pods, created with switches of radix `r`:
-     *  - The aggregates will reserve `r/2` uplinks to the core, and the core should be 
-     *    at least `n * r / 4` switches, interleaved between each aggregate.
-     *    We assume that we have exactly `r^2/4` core switches from now on for simplicity.
-     * -  The aggregate to edge per pod, should be a bipartite graph K_{r/2},{r/2}/
-     * -  The edge will have `r/2` ports left to serve the hosts, although we allow the number
-     *    to be variable.
-     *    With links having the exact same characteristics, this means that if `numServers` is
-     *    more than `r/2`, the topology would be oversubscribed.
-     * -  Similarly, we can also only serve at most `r` pods, we won't allow any more than that,
-     *    since at that point this is no longer a Clos topology.
-     * 
-     * So in total, we will have `r^2/4` core switches, serving `r` pods at most, each containing `r`
-     * switches. The number of aggregates would be `r.r/2 = r^2/2` and the same for edges.
-     * 
-     * When MPI is used, we will put all nodes belonging to the same pod in the same LP, and we
-     * will interleave the core nodes independently.
-     * 
-     * If super-mpi is to be used, then each pod would be split in half, to be run on 2 MPI
-     * proceses, so in the first case, for `n` pods, there will be at most `n` MPI processes
-     * or `2*n` with super-mpi. Note that super-mpi is much more memory hungry. 
-    */
-
-    #if MPI_ENABLED
-    this->createCoreMPI();
-    #else
-    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
-    this->coreSwitches.Create(numCores);
-    #endif /* MPI_ENABLED */
-    
-    // We separate aggregate and edges for each pod for easier linking
+void ClosTopology :: createPodMPI() {
     uint32_t numAggAndEdgeSwitchesPerPod = this->params.switchRadix / 2;
+    if (!this->params.mpi) {
+        for (uint32_t i = 0; i < this->params.numPods; i++) {
+            this->aggSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod));
+            this->edgeSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod));
+        }
+        return;
+    }
 
     uint32_t sysIdCounter = 0;
     uint32_t sysIdStep = 
@@ -133,6 +107,48 @@ void ClosTopology :: createTopology() {
         this->aggSwitches.push_back(aggs);
         this->edgeSwitches.push_back(edges);
     }
+}
+#endif /* MPI_ENABLED */
+
+void ClosTopology :: createTopology() {
+    /**
+     * In a Clos topology with `n` pods, created with switches of radix `r`:
+     *  - The aggregates will reserve `r/2` uplinks to the core, and the core should be 
+     *    at least `n * r / 4` switches, interleaved between each aggregate.
+     *    We assume that we have exactly `r^2/4` core switches from now on for simplicity.
+     * -  The aggregate to edge per pod, should be a bipartite graph K_{r/2},{r/2}/
+     * -  The edge will have `r/2` ports left to serve the hosts, although we allow the number
+     *    to be variable.
+     *    With links having the exact same characteristics, this means that if `numServers` is
+     *    more than `r/2`, the topology would be oversubscribed.
+     * -  Similarly, we can also only serve at most `r` pods, we won't allow any more than that,
+     *    since at that point this is no longer a Clos topology.
+     * 
+     * So in total, we will have `r^2/4` core switches, serving `r` pods at most, each containing `r`
+     * switches. The number of aggregates would be `r.r/2 = r^2/2` and the same for edges.
+     * 
+     * When MPI is used, we will put all nodes belonging to the same pod in the same LP, and we
+     * will interleave the core nodes independently.
+     * 
+     * If super-mpi is to be used, then each pod would be split in half, to be run on 2 MPI
+     * proceses, so in the first case, for `n` pods, there will be at most `n` MPI processes
+     * or `2*n` with super-mpi. Note that super-mpi is much more memory hungry. 
+    */
+
+    #if MPI_ENABLED
+    this->createCoreMPI();
+    this->createPodMPI();
+    #else
+    uint32_t numCores = this->params.switchRadix * this->params.switchRadix / 4;
+    this->coreSwitches.Create(numCores);
+
+    for (uint32_t i = 0; i < this->params.numPods; i++) {
+        this->aggSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod));
+        this->edgeSwitches.push_back(NodeContainer(numAggAndEdgeSwitchesPerPod));
+    }
+    #endif /* MPI_ENABLED */
+
+    uint32_t numAggAndEdgeSwitchesPerPod = this->params.switchRadix / 2;
 
     // Create servers
     this->createServers();
@@ -1324,6 +1340,7 @@ int main(int argc, char *argv[]) {
     topolgoy_descriptor topo_params;
 
     SWARM_SET_LOG_LEVEL(INFO);
+    LogComponentEnable("Ipv4MpiFlowProbe", LOG_LEVEL_WARN);
 
     /**
      * TODO: Why in the holly names on earth, do we even need to do this ???????

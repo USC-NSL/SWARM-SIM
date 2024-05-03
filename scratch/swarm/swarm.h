@@ -280,6 +280,7 @@ class ClosTopology {
 
         #if MPI_ENABLED
         void createCoreMPI();
+        void createPodMPI();
         #endif
         
         void assignServerIps();
@@ -426,6 +427,9 @@ class ClosTopology {
         }
 
         uint32_t getSystemIdOfServer(uint32_t host_idx) const {
+            if (!this->params.mpi)
+                return 0;
+
             static uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
             static uint32_t sysIdStep = 
                 ((numAggAndEdgeeSwitchesPerPod * this->params.numPods) > (param_pod_procs)) ?
@@ -455,6 +459,7 @@ class ClosTopology {
         }
 
         void printSystemIds() {
+            #if MPI_ENABLED
             SWARM_DEBG("Printing topology system identifiers");
             SWARM_DEBG("We have " << this->coreSwitches.GetN() << " core swithces");
             for (uint32_t i = 0; i < this->coreSwitches.GetN(); i++) {
@@ -488,6 +493,7 @@ class ClosTopology {
                         << " vs " << getSystemIdOfServer(this->params.numServers * i + j));
                 }
             }
+            #endif
         }
 };
 

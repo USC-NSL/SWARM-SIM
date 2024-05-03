@@ -319,7 +319,7 @@ Ipv4MpiFlowProbe::ForwardUpLogger(
     else {
         if (Simulator::Now() > Ipv4MpiFlowClassifier :: GetMonitorUntil())
             return;
-        NS_ABORT_MSG("Not found in forwardUp");
+        NS_LOG_WARN("Dropping NULL message");
     }
 }
 
