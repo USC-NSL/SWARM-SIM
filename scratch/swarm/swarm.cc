@@ -1190,7 +1190,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
 uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params) {
     #if MPI_ENABLED
     if (topo_params->mpi) {
-        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
+        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
         MpiInterface::Enable(&argc, &argv);
 
         systemId = MpiInterface::GetSystemId();

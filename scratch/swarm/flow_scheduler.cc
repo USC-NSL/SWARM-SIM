@@ -76,6 +76,9 @@ FlowScheduler :: dispatchAndSchedule() {
 void
 FlowScheduler :: readFlowFile() {
     m_flow_file_stream.open(m_flow_file_path);
+    if (m_flow_file_stream.fail())
+        NS_ABORT_MSG("Failed to open flow file at " << std::string(m_flow_file_path));
+
     m_flow_file_stream >> num_flows;
     m_enabled = true;
 
