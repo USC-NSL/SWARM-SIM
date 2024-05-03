@@ -1,6 +1,7 @@
 #include "ns3/ptr.h"
 #include "ns3/node.h"
 #include "ns3/integer.h"
+#include "ns3/uinteger.h"
 #include "ns3/boolean.h"
 #include "wcmp-static-routing-helper.h"
 
@@ -8,41 +9,32 @@ namespace ns3
 {
 
 WcmpStaticRoutingHelper :: WcmpStaticRoutingHelper() {
-    // this->m_factory.SetTypeId("ns3::wcmp::WcmpStaticRouting");
+    std::cout << "Default WCMPHelper was created!!!\n";
 }
 
 WcmpStaticRoutingHelper :: WcmpStaticRoutingHelper(uint16_t level, level_mapper_func f) {
-    this->m_func = f;
-    // this->m_factory.SetTypeId("ns3::wcmp::WcmpStaticRouting");
-    // this->m_factory.Set("level", IntegerValue(level));
+    m_func = f;
+    m_routing_levels = level;
 }
 
 
 WcmpStaticRoutingHelper :: WcmpStaticRoutingHelper(const WcmpStaticRoutingHelper& o) 
-    // : m_factory(o.m_factory)
 {
 }
 
 void
 WcmpStaticRoutingHelper :: doEcmp() {
-    // this->m_factory.Set("ecmp", BooleanValue(true));
-}
-
-void
-WcmpStaticRoutingHelper :: useCache() {
-    // this->m_factory.Set("UseCache", BooleanValue(true));
 }
 
 WcmpStaticRoutingHelper*
 WcmpStaticRoutingHelper :: Copy() const {
-    return new WcmpStaticRoutingHelper(*this);
+    return new WcmpStaticRoutingHelper(m_routing_levels, m_func);
 }
 
 Ptr<Ipv4RoutingProtocol>
 WcmpStaticRoutingHelper :: Create(Ptr<Node> node) const
 {
-    Ptr<wcmp::WcmpStaticRouting> agent = CreateObject<wcmp::WcmpStaticRouting>();
-    agent->SetMapperFunction(this->m_func);
+    Ptr<wcmp::WcmpStaticRouting> agent = CreateObject<wcmp::WcmpStaticRouting>(m_routing_levels, m_func);
     return agent;
 }
 

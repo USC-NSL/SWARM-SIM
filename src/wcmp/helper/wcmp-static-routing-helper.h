@@ -22,11 +22,13 @@ class WcmpStaticRoutingHelper : public Ipv4RoutingHelper {
         void SetInterfaceWeight(Ptr<Ipv4> ipv4, uint32_t interface, uint16_t level, uint16_t weight);
 
         void doEcmp();
-        void useCache();
+        static void setCaching(bool do_caching) {
+            wcmp::WcmpStaticRouting::SetCaching(do_caching);
+        }
 
     private:
-        // ObjectFactory m_factory;
         level_mapper_func m_func = nullptr;
+        uint16_t m_routing_levels = 1;
 };
 
 } // namespace ns3

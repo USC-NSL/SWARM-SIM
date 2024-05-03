@@ -4,7 +4,7 @@
 #include "ns3/node.h"
 #include "ns3/boolean.h"
 #include "ns3/simulator.h"
-#include "ns3/integer.h"
+#include "ns3/uinteger.h"
 
 #include <iomanip>
 
@@ -18,6 +18,8 @@ namespace wcmp
 {
 
 NS_OBJECT_ENSURE_REGISTERED(WcmpStaticRouting);
+
+bool WcmpStaticRouting :: m_use_cache = true;
 
 TypeId
 WcmpStaticRouting :: GetTypeId() {
@@ -45,20 +47,6 @@ WcmpStaticRouting :: GetTypeId() {
                 MakeBooleanChecker()
             )
             .AddAttribute(
-                "level",
-                "The number of levels on the WCMP hash table",
-                IntegerValue(0),
-                MakeIntegerAccessor(&WcmpStaticRouting::m_levels),
-                MakeIntegerChecker<uint16_t>(1)
-            )
-            .AddAttribute(
-                "UseCache",
-                "Whether or not to use the WCMP cache",
-                BooleanValue(false),            // TODO: Fix this for GOD's sake!
-                MakeBooleanAccessor(&WcmpStaticRouting::m_use_cache),
-                MakeBooleanChecker()
-            )
-            .AddAttribute(
                 "ecmp",
                 "Whether or not to use plain ECMP",
                 BooleanValue(false),
@@ -81,14 +69,15 @@ WcmpStaticRouting :: WcmpStaticRouting(uint16_t level)
       m_levels(level),
       weights(level)
 {
+    NS_ASSERT(level > 1);
     NS_LOG_FUNCTION(this);
 }
 
 WcmpStaticRouting :: WcmpStaticRouting(uint16_t level, level_mapper_func f) 
     : m_ipv4(nullptr),
-      m_levels(level),
       weights(level)
 {
+    this->m_levels = level;
     this->m_level_mapper_func = f;
     NS_LOG_FUNCTION(this);
 }
@@ -194,7 +183,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
     Ipv4RoutingTableEntry *chosen = nullptr;
 
     // First, lookup the cache if it is enabled
-    if (m_use_cache)
+    if (m_use_cache) 
         chosen = this->LookupCache(hash_val, dest);
 
     if (m_do_plain_ecmp) {
@@ -237,7 +226,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
             chosen = this->weights.choose(entries, hash_val, level);
 
             if (m_use_cache)
-                this->UpdateCache(hash_val, dest, chosen);
+                this->UpdateCache(hash_val, chosen);
         }
 
         if (!chosen) {
@@ -328,7 +317,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
             chosen = this->weights.choose(entries, hash_val, level);
 
             if (m_use_cache)
-                this->UpdateCache(hash_val, dest, chosen);
+                this->UpdateCache(hash_val, chosen);
         }
         else {
             if (chosen->GetInterface() == iif)
@@ -583,6 +572,13 @@ WcmpStaticRouting :: NotifyRemoveAddress(uint32_t interface, Ipv4InterfaceAddres
             it++;
         }
     }
+}
+
+void
+WcmpStaticRouting :: UpdateCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry) {
+    auto res = wcmp_cache.find(hash_val);
+    if (res == wcmp_cache.end())
+        wcmp_cache[hash_val] = entry;
 }
 
 uint32_t 

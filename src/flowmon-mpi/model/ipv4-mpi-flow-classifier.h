@@ -71,8 +71,6 @@ class Ipv4MpiFlowClassifier : public MpiFlowClassifier
     std::map<FiveTuple, FlowId> m_flowMap;
     /// Map to FlowIds to FlowPacketId
     std::map<FlowId, FlowPacketId> m_flowPktIdMap;
-    /// Map FlowIds to (DSCP value, packet count) pairs
-    std::map<FlowId, std::map<Ipv4Header::DscpType, uint32_t>> m_flowDscpMap;
 };
 
 /**

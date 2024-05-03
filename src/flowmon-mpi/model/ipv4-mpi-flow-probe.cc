@@ -315,11 +315,14 @@ Ipv4MpiFlowProbe::ForwardUpLogger(
         NS_LOG_DEBUG("ReportLastRx (" << this << ", " << flowId << ", " << packetId << ", " << size
                                       << "); " << ipHeader << *ipPayload);
         m_flowMonitor->ReportLastRx(this, flowId, packetId, size, tStart, tLast);
+        // if (tcpHeader.GetFlags() & tcpHeader.FIN) 
+        //     std::cout << "Flow " << flowId << " just finihsed. It has flag " << std::to_string(tcpHeader.GetFlags()) << "\n";
     }
     else {
         if (Simulator::Now() > Ipv4MpiFlowClassifier :: GetMonitorUntil())
             return;
-        NS_LOG_WARN("Dropping NULL message");
+        
+        NS_ABORT_MSG("This should not happen!");
     }
 }
 

@@ -11,6 +11,12 @@
 
 namespace ns3
 {
+    SingleFlowHelper::SingleFlowHelper(std::string protocol)
+    {
+        m_factory.SetTypeId("ns3::SingleFlowApplication");
+        m_factory.Set("Protocol", StringValue(protocol));
+    }
+    
     SingleFlowHelper::SingleFlowHelper(std::string protocol, Address address)
     {
         m_factory.SetTypeId("ns3::SingleFlowApplication");

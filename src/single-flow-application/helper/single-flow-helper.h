@@ -17,6 +17,7 @@ namespace ns3
   class SingleFlowHelper
   {
     public:
+      SingleFlowHelper(std::string protocol);
       SingleFlowHelper(std::string protocol, Address address);
 
       void SetAttribute(std::string name, const AttributeValue& value);

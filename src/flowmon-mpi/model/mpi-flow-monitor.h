@@ -28,8 +28,6 @@ class MpiFlowMonitor : public Object
 
         uint64_t txBytes;
         uint64_t rxBytes;
-        uint32_t txPackets;
-        uint32_t rxPackets;
 
         std::vector<uint32_t>
             packetsDropped; // packetsDropped[reasonCode] => number of dropped packets
@@ -94,7 +92,7 @@ class MpiFlowMonitor : public Object
         FlowId flowId,
         FlowPacketId packetId,
         uint32_t packetSize,
-        uint32_t reasonCode);
+        uint32_t reasonCode); 
 
     // --- methods to get the results ---
 

@@ -148,22 +148,10 @@ Ipv4MpiFlowClassifier::Classify(
         FlowId newFlowId = GetNewFlowId();
         insert.first->second = newFlowId;
         m_flowPktIdMap[newFlowId] = 0;
-        m_flowDscpMap[newFlowId];
     }
     else
     {
         m_flowPktIdMap[insert.first->second]++;
-    }
-
-    // increment the counter of packets with the same DSCP value
-    Ipv4Header::DscpType dscp = ipHeader.GetDscp();
-    auto dscpInserter = m_flowDscpMap[insert.first->second].insert(
-        std::pair<Ipv4Header::DscpType, uint32_t>(dscp, 1));
-
-    // if the insertion did not succeed, we need to increment the counter
-    if (!dscpInserter.second)
-    {
-        m_flowDscpMap[insert.first->second][dscp]++;
     }
 
     *out_flowId = insert.first->second;
@@ -194,22 +182,6 @@ Ipv4MpiFlowClassifier::SortByCount::operator()(std::pair<Ipv4Header::DscpType, u
     return left.second > right.second;
 }
 
-std::vector<std::pair<Ipv4Header::DscpType, uint32_t>>
-Ipv4MpiFlowClassifier::GetDscpCounts(FlowId flowId) const
-{
-    auto flow = m_flowDscpMap.find(flowId);
-
-    if (flow == m_flowDscpMap.end())
-    {
-        NS_FATAL_ERROR("Could not find the flow with ID " << flowId);
-    }
-
-    std::vector<std::pair<Ipv4Header::DscpType, uint32_t>> v(flow->second.begin(),
-                                                             flow->second.end());
-    std::sort(v.begin(), v.end(), SortByCount());
-    return v;
-}
-
 void
 Ipv4MpiFlowClassifier::SerializeToXmlStream(std::ostream& os, uint16_t indent) const
 {
@@ -227,20 +199,6 @@ Ipv4MpiFlowClassifier::SerializeToXmlStream(std::ostream& os, uint16_t indent) c
            << " sourcePort=\"" << iter->first.sourcePort << "\""
            << " destinationPort=\"" << iter->first.destinationPort << "\">\n";
 
-        indent += 2;
-        auto flow = m_flowDscpMap.find(iter->second);
-
-        if (flow != m_flowDscpMap.end())
-        {
-            for (auto i = flow->second.begin(); i != flow->second.end(); i++)
-            {
-                Indent(os, indent);
-                os << "<Dscp value=\"0x" << std::hex << static_cast<uint32_t>(i->first) << "\""
-                   << " packets=\"" << std::dec << i->second << "\" />\n";
-            }
-        }
-
-        indent -= 2;
         Indent(os, indent);
         os << "</Flow>\n";
     }

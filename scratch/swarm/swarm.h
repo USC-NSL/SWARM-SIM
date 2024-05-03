@@ -120,7 +120,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
-#define TCP_PACKET_SIZE 1024
+#define TCP_PACKET_SIZE 1400
 
 #define TICK_PROGRESS_EVERY_WHAT_PERCENT 0.1
 #define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
@@ -544,6 +544,8 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
     ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
+    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(10000));
+    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(10000));
 }
 
 void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params);

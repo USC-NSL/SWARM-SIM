@@ -84,8 +84,6 @@ MpiFlowMonitor::GetStatsForFlow(FlowId flowId)
         MpiFlowMonitor::FlowStats& ref = m_flowStats[flowId];
         ref.txBytes = 0;
         ref.rxBytes = 0;
-        ref.txPackets = 0;
-        ref.rxPackets = 0;
         return ref;
     }
     else
@@ -110,18 +108,14 @@ MpiFlowMonitor::ReportFirstTx(Ptr<MpiFlowProbe> probe,
     TrackedPacket& tracked = m_trackedPackets[std::make_pair(flowId, packetId)];
     tracked.firstSeenTime = now;
     tracked.lastSeenTime = tracked.firstSeenTime;
-    NS_LOG_INFO("ReportFirstTx: adding tracked packet (flowId=" << flowId << ", packetId="
-                                                                 << packetId << ").");
-
     probe->AddPacketStats(flowId, packetSize, Seconds(0));
 
     FlowStats& stats = GetStatsForFlow(flowId);
-    stats.txBytes += packetSize;
-    stats.txPackets++;
-    if (stats.txPackets == 1)
+    if (stats.txBytes == 0)
     {
         stats.timeFirstTxPacket = now;
     }
+    stats.txBytes += packetSize;
     stats.timeLastTxPacket = now;
 }
 
@@ -162,14 +156,11 @@ MpiFlowMonitor::ReportLastRx(
     if (stats.timeFirstTxPacket.ToInteger(Time::GetResolution()) == 0)
         stats.timeFirstTxPacket = Time::FromInteger(tStart, Time::GetResolution());
 
-
-    stats.rxBytes += packetSize;
-    stats.rxPackets++;
-    if (stats.rxPackets == 1)
+    if (stats.rxBytes == 1)
     {
         stats.timeFirstRxPacket = now;
     }
-
+    stats.rxBytes += packetSize;
     stats.timeLastRxPacket = now;
 
     NS_LOG_DEBUG("ReportLastTx: removing tracked packet (flowId=" << flowId << ", packetId="
@@ -321,7 +312,6 @@ MpiFlowMonitor::SerializeToXmlStream(
            << "\"" ATTRIB_TIME(timeFirstTxPacket) ATTRIB_TIME(timeFirstRxPacket)
                   ATTRIB_TIME(timeLastTxPacket) ATTRIB_TIME(timeLastRxPacket) 
                        ATTRIB(txBytes) ATTRIB(rxBytes)
-                          ATTRIB(txPackets) ATTRIB(rxPackets)
            << ">\n";
 #undef ATTRIB_TIME
 #undef ATTRIB
@@ -407,8 +397,6 @@ MpiFlowMonitor::ResetAllStats()
         auto& flowStat = iter.second;
         flowStat.txBytes = 0;
         flowStat.rxBytes = 0;
-        flowStat.txPackets = 0;
-        flowStat.rxPackets = 0;
         flowStat.bytesDropped.clear();
         flowStat.packetsDropped.clear();
     }

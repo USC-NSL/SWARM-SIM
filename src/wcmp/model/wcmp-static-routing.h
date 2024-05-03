@@ -48,9 +48,6 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Whether or not to add a route when an interface comes up
         bool m_add_route_on_up;
 
-        /// Whether or not to use the WCMP cache
-        bool m_use_cache;
-
         /// Use plain ECMP
         bool m_do_plain_ecmp;
 
@@ -71,7 +68,7 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         WcmpWeights weights;
 
         /// WCMP hash cache, speeds up lookup
-        std::unordered_map<uint32_t, std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>> wcmp_cache;
+        std::unordered_map<uint32_t, Ipv4RoutingTableEntry*> wcmp_cache;
         std::unordered_map<uint32_t, Ipv4RoutingTableEntry*> ecmp_cache;
 
         /// Container for the network routes
@@ -91,6 +88,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         bool LookupRoute(const Ipv4RoutingTableEntry& route, uint32_t metric);
 
     protected:
+        /// Whether or not to use the WCMP cache
+        static bool m_use_cache;
+
         void DoDispose() override;
 
         void InvalidateCache() {
@@ -109,22 +109,11 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
                 if (res == wcmp_cache.end())
                     return nullptr;
                 
-                for (auto elem = res->second.begin(); elem != res->second.end(); elem++) {
-                    if (elem->first == dest)
-                        return elem->second;
-                }
-
-                NS_ABORT_MSG("Invalid cache miss, this should not happen!");
+                return res->second;
             }
         }
 
-        void UpdateCache(uint32_t hash_val, Ipv4Address dest, Ipv4RoutingTableEntry *entry) {
-            auto res = wcmp_cache.find(hash_val);
-            if (res == wcmp_cache.end())
-                wcmp_cache[hash_val] = std::vector<std::pair<Ipv4Address, Ipv4RoutingTableEntry*>>{std::make_pair(dest, entry)};
-            else
-                wcmp_cache[hash_val].push_back(std::make_pair(dest, entry));
-        }
+        void UpdateCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry);
 
         void UpdateEcmpCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry) {
             auto res = ecmp_cache.find(hash_val);
@@ -186,6 +175,9 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         }
         void SetIfUpFunction(if_up_down_func f) {
             this->m_if_up_func = f;
+        } 
+        static void SetCaching(bool do_caching) {
+            WcmpStaticRouting :: m_use_cache = do_caching;
         }
 
         uint32_t GetNRoutes() const;

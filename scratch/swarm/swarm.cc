@@ -406,14 +406,20 @@ void ClosTopology :: setupCoreRouting() {
 void ClosTopology :: installWcmpStack() {
     InternetStackHelper internetHelper;
     Ipv4ListRoutingHelper listHelper;
+    
+    if (param_use_cache) {
+        SWARM_INFO("WCMP flow caching is enabled.");
+    }
+    else {
+        SWARM_INFO("WCMP flow caching is disabled.");
+    }
+
+    WcmpStaticRoutingHelper::setCaching(param_use_cache);
     WcmpStaticRoutingHelper wcmpHelper((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ipv4StaticRoutingHelper staticHelper;
 
     if (param_plain_ecmp)
         wcmpHelper.doEcmp();
-
-    if (param_use_cache)
-        wcmpHelper.useCache();
     
     listHelper.Add(staticHelper, 0);
     listHelper.Add(wcmpHelper, WCMP_ROUTING_PRIORITY);
@@ -435,7 +441,7 @@ void ClosTopology :: doEcmp() {
     */
 
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
-    WcmpStaticRoutingHelper wcmpHelper;
+    WcmpStaticRoutingHelper wcmpHelper((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ipv4StaticRoutingHelper staticHelper;
     Ptr<Ipv4StaticRouting> staticRouter;
     Ptr<wcmp::WcmpStaticRouting> wcmpRouter;
@@ -480,7 +486,7 @@ void ClosTopology :: doEcmp() {
 
 void ClosTopology :: enableAggregateBackupPaths() {
     uint32_t numAggAndEdgeeSwitchesPerPod = this->params.switchRadix / 2;
-    WcmpStaticRoutingHelper wcmpHelper;
+    WcmpStaticRoutingHelper wcmpHelper((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ptr<wcmp::WcmpStaticRouting> wcmpRouter;
 
     char buf[17];
@@ -579,12 +585,14 @@ void ClosTopology :: mitigateAggregateToCoreLink(uint32_t ai, uint32_t cj, uint1
     uint32_t node_idx, edge_idx;
 
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        // Skip the failed pod
         if (pod_num == ai_pod_num)
             continue;
 
+        // For all other pods, iterate over aggergates
         for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
             node_idx = pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx;
-            if ((node_idx % 2) != (ai % 2))
+            if ((agg_idx % numAggAndEdgeeSwitchesPerPod) != (ai % numAggAndEdgeeSwitchesPerPod))
                 continue;
 
             std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> props = 
@@ -599,6 +607,7 @@ void ClosTopology :: mitigateAggregateToCoreLink(uint32_t ai, uint32_t cj, uint1
 }
 
 void ClosTopology :: mitigateAggregateToCoreLinkDown(uint32_t ai, uint32_t cj) {
+    SWARM_DEBG("Mitigating link down!");
     this->mitigateAggregateToCoreLink(ai, cj, 0);
 }
 
@@ -775,7 +784,7 @@ void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_
         onOffClient.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
         onOffClient.SetAttribute("OffTime", StringValue("ns3::ConstantRandomVariable[Constant=0]"));
         onOffClient.SetAttribute("DataRate", StringValue(rate));
-        onOffClient.SetAttribute("PacketSize", UintegerValue(UDP_PACKET_SIZE_SMALL));
+        onOffClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
         onOffClient.SetAttribute("MaxBytes", UintegerValue(0));
 
         this->serverApplications[client_host].Add(onOffClient.Install(ptr));
@@ -840,11 +849,14 @@ std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTop
         NS_ASSERT((src_idx % (this->params.switchRadix / 2)) == (dst_idx % (this->params.switchRadix / 2)));
 
         std::pair<uint32_t, uint32_t> pair_src = this->getPodAndIndex(src_idx);
-        src_if_idx = (dst_idx / (this->params.switchRadix / 2)) + 1;
+        src_if_idx = (dst_idx / (this->params.switchRadix / 2)) + (this->params.switchRadix / 2) + 1;
         dst_if_idx = pair_src.first + 1;
         src = this->getAggregate(src_idx);
         dst = this->getCore(dst_idx);
     }
+
+    SWARM_DEBG("For " << src_level << ":" << src_idx << " -- " << dst_level << ":" << dst_idx 
+        << " the interface indices are " << src_if_idx << " and " << dst_if_idx);
 
     return std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t>{
         src, src_if_idx, dst, dst_if_idx
@@ -858,7 +870,7 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
         src_level, src_idx, dst_level, dst_idx
     );
 
-    SWARM_DEBG_ALL("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
+    SWARM_DEBG("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
@@ -919,8 +931,10 @@ void ClosTopology :: doUpdateWcmp(topology_level node_level, uint32_t node_idx, 
     else
         node = this->getCore(node_idx);
 
-    WcmpStaticRoutingHelper wcmp;
+    WcmpStaticRoutingHelper wcmp((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
+    SWARM_DEBG("Mitigating link change on node " << node_level << " " << node_idx 
+        << " : For interface " << interface_idx << " towards level " << level << " to weight " << weight);
     wcmp.SetInterfaceWeight(ipv4, interface_idx, level, weight);
 }
 
@@ -1028,12 +1042,13 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     */
 
     Ptr<Node> ptr;
+    static SingleFlowHelper singleFlowClient("ns3::TcpSocketFactory");
 
     if ((ptr = topo->getLocalHost(flow->src))) {
-        SingleFlowHelper singleFlowClient("ns3::TcpSocketFactory", InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT));
-
+        singleFlowClient.SetAttribute("Remote", AddressValue(InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT)));
         singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        // singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        singleFlowClient.SetAttribute("PacketSize", UintegerValue(8000));
         singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
         singleFlowClient.Install(ptr).Start(Time(0));
     }
@@ -1175,7 +1190,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
 uint32_t setupSwarmSimulator(int argc, char* argv[], topology_descriptor_t *topo_params) {
     #if MPI_ENABLED
     if (topo_params->mpi) {
-        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::NullMessageSimulatorImpl"));
+        GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
         MpiInterface::Enable(&argc, &argv);
 
         systemId = MpiInterface::GetSystemId();
@@ -1340,7 +1355,6 @@ int main(int argc, char *argv[]) {
     topolgoy_descriptor topo_params;
 
     SWARM_SET_LOG_LEVEL(INFO);
-    LogComponentEnable("Ipv4MpiFlowProbe", LOG_LEVEL_WARN);
 
     /**
      * TODO: Why in the holly names on earth, do we even need to do this ???????
