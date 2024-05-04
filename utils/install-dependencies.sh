@@ -45,7 +45,8 @@ sudo apt install -y g++ python3 python3-dev python3-pip pkg-config sqlite3 cmake
 
 if [ $m_flag = 1 ]; then
   echo "Installing MPI dependencies"
-  sudo apt install -y openmpi-bin openmpi-common openmpi-doc libopenmpi-dev
+  sudo apt install -y mpich
+  export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu/mpich/include
 fi
 
 if [ $d_flag = 1 ]; then
