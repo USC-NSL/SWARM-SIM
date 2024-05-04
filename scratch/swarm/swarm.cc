@@ -2,6 +2,7 @@
 #include <thread>
 #include <sys/stat.h>
 #include "swarm.h"
+#include "ns3/traffic-control-helper.h"
 #include "ns3/single-flow-helper.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/mpi-flow-monitor-helper.h"
@@ -162,6 +163,7 @@ void ClosTopology :: createTopology() {
         }
     }
     this->installWcmpStack();
+    this->installRedQueueDisc();
 }
 
 void ClosTopology :: createLinks() {
@@ -453,6 +455,25 @@ void ClosTopology :: installWcmpStack() {
         internetHelper.Install(edgeSwitches[pod_num]);
         internetHelper.Install(aggSwitches[pod_num]);
     }
+}
+
+void ClosTopology :: installRedQueueDisc() {
+    TrafficControlHelper redHelper;
+    redHelper.SetRootQueueDisc (
+        "ns3::RedQueueDisc",
+        "LinkBandwidth", StringValue (std::to_string(this->params.linkRate) + "Gbps"),
+        "LinkDelay", StringValue (std::to_string(this->params.linkDelay) + "us"),
+        // 50 For every 10 Gbps
+        "MinTh", DoubleValue (50 * this->params.linkRate / 10),
+        "MaxTh", DoubleValue (150 * this->params.linkRate / 10)
+    );
+
+    for (auto const & elem: this->serverToEdgeLinks) 
+        redHelper.Install(elem.second);
+    for (auto const & elem: this->edgeToAggLinks) 
+        redHelper.Install(elem.second);
+    for (auto const & elem: this->aggToCoreLinks) 
+        redHelper.Install(elem.second);
 }
 
 void ClosTopology :: doEcmp() {

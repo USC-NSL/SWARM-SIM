@@ -292,6 +292,7 @@ class ClosTopology {
         
         // MUST be called before creating interfaces
         void installWcmpStack();
+        void installRedQueueDisc();
 
         void doEcmp();
         void enableAggregateBackupPaths();
@@ -548,6 +549,12 @@ void doGlobalConfigs() {
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
     ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(7500));
     ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(10000));
+    ns3::GlobalValue::Bind ("ChecksumEnabled", ns3::BooleanValue (false));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::UseEcn", ns3::BooleanValue (true));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::UseHardDrop", ns3::BooleanValue (false));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (7500));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("2666p")));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::QW", ns3::DoubleValue (1));
 }
 
 void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params);
