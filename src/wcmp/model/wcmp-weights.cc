@@ -84,7 +84,6 @@ WcmpWeights :: chooseEcmp(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries
 
 Ipv4RoutingTableEntry* 
 WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, uint32_t hash_val, uint16_t level) {
-    // printWeights();
     // Loop and get the total weight of active interfaces
     uint32_t sum = 0;
     uint32_t if_index;
@@ -95,9 +94,7 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
 
         // Is the interface up?
         if (this->states[if_index]) {
-            NS_LOG_LOGIC("Considering if_index " << if_index);
             sum += this->weights[_GET_LEVELED_IF(level, if_index)];
-            NS_LOG_LOGIC("Current sum is " << sum);
             up_entries.push_back(std::make_pair(it, sum));
         }
     }
@@ -105,7 +102,7 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
     // This should not happen
     NS_ABORT_IF(!sum);
 
-    if (up_entries.size() == 0) {
+    if (up_entries.size() == 0) { 
         NS_LOG_LOGIC("No Up entries");
         return nullptr;
     }
@@ -115,16 +112,12 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
         return up_entries.at(0).first;
     }
 
-    NS_LOG_LOGIC("Sum is " << sum);
-
+    uint32_t r = ((hash_val % sum));
     std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator it;
-    for (it = up_entries.begin(); it != up_entries.end(); it++) {
-        NS_LOG_LOGIC("Comparing " << hash_val << " with boundry " << it->second);
-        if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX) {
-            NS_LOG_LOGIC("Accepting output " << it->first);
+    for (it = up_entries.begin(); it != up_entries.end(); it++)
+        if (r < it->second)
             return it->first;
-        }
-    }
+
     return (--it)->first;
 }
 
@@ -137,15 +130,6 @@ WcmpWeights :: add_interface(uint32_t if_index, uint16_t weight) {
 
     for (uint16_t level = 0; level < m_levels; level++)
         this->weights[_GET_LEVELED_IF(level, if_index)] = (uint16_t) DEFAULT_WCMP_WEIGHT;
-}
-
-void
-WcmpWeights :: printWeights() {
-    printf("Weights\n");
-    for (auto const & it: this->weights) {
-        printf("%x : %u\n", it.first, it.second);
-    }
-    printf("\n\n");
 }
     
 } // namespace wcmp

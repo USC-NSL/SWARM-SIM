@@ -26,6 +26,7 @@ class WcmpHasher {
     private:
         Hasher m_hasher;
         hash_alg_t hash_algorithm = HASH_IP_TCP_UDP;
+        uint32_t salt;
 
     public:
         /**
@@ -45,7 +46,6 @@ class WcmpHasher {
         uint32_t getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header);
         uint32_t getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header);
         uint32_t getHash(Ptr<const Packet> p, const Ipv4Header& header);
-        std::string dump_packet(Ptr<const Packet> p, const Ipv4Header& header);
 };
 
 } // namespace wcmp

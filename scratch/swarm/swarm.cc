@@ -308,7 +308,7 @@ void ClosTopology :: createFabricInterfaces() {
 
     // edge-server interfaces
     Ptr<Ipv4> ipv4;
-    uint32_t switch_idx, if_index;
+    uint32_t switch_idx, if_index, if_index_other;
     for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
         for (uint32_t edge_idx = 0; edge_idx < numAggAndEdgeeSwitchesPerPod; edge_idx++) {
             ipv4 = this->getEdge(pod_num, edge_idx)->GetObject<Ipv4>();
@@ -321,6 +321,9 @@ void ClosTopology :: createFabricInterfaces() {
 
                 ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
                 ipv4->SetUp(if_index);
+
+                SWARM_DEBG("Interface index " << if_index << " was created from edge " << switch_idx << 
+                    " to server " << (this->params.numServers * switch_idx + i));
             }
         }
     }
@@ -340,14 +343,17 @@ void ClosTopology :: createFabricInterfaces() {
                 ipv4->SetUp(if_index);
 
                 ipv4 = this->getAggregate(pod_num, agg_idx)->GetObject<Ipv4>();
-                if_index = ipv4->AddInterface(
+                if_index_other = ipv4->AddInterface(
                     this->edgeToAggLinks[std::make_tuple(
                         pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx,
                         pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx
                     )].Get(1)
                 );
-                ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
-                ipv4->SetUp(if_index);
+                ipv4->AddAddress(if_index_other, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index_other);
+
+                SWARM_DEBG("Interface index " << if_index << " was created from edge " << (pod_num * numAggAndEdgeeSwitchesPerPod + edge_idx) 
+                    << " to aggregate " << (pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx) << " with index " << if_index_other);
             }
         }
     }
@@ -355,14 +361,32 @@ void ClosTopology :: createFabricInterfaces() {
     // agg-core interfaces
     Ptr<Node> node;
     Ptr<NetDevice> device;
-    for (auto const& map_elem : this->aggToCoreLinks) {
-        for (uint32_t i = 0; i < 2; i++ ) {
-            device = map_elem.second.Get(i);
-            node = device->GetNode();
-            ipv4 = node->GetObject<Ipv4>();
-            if_index = ipv4->AddInterface(device);
-            ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
-            ipv4->SetUp(if_index);
+    for (uint32_t pod_num = 0; pod_num < this->params.numPods; pod_num++) {
+        for (uint32_t agg_idx = 0; agg_idx < numAggAndEdgeeSwitchesPerPod; agg_idx++) {
+            for (uint32_t i = 0; i < numAggAndEdgeeSwitchesPerPod; i++) {
+                ipv4 = this->getAggregate(pod_num, agg_idx)->GetObject<Ipv4>();
+                if_index = ipv4->AddInterface(
+                    this->aggToCoreLinks[std::make_tuple(
+                        pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx,
+                        i * numAggAndEdgeeSwitchesPerPod + agg_idx
+                    )].Get(0)
+                );
+                ipv4->AddAddress(if_index, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index);
+
+                ipv4 = this->getCore(i * numAggAndEdgeeSwitchesPerPod + agg_idx)->GetObject<Ipv4>();
+                if_index_other = ipv4->AddInterface(
+                    this->aggToCoreLinks[std::make_tuple(
+                        pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx,
+                        i * numAggAndEdgeeSwitchesPerPod + agg_idx
+                    )].Get(1)
+                );
+                ipv4->AddAddress(if_index_other, Ipv4InterfaceAddress(Ipv4Address("127.0.0.1"), Ipv4Mask("/8")));
+                ipv4->SetUp(if_index_other);
+
+                SWARM_DEBG("Interface index " << if_index << " was created from agg " << (pod_num * numAggAndEdgeeSwitchesPerPod + agg_idx) 
+                    << " to core " << (i * numAggAndEdgeeSwitchesPerPod + agg_idx) << " with index " << if_index_other);
+            }
         }
     }
 }
@@ -824,6 +848,16 @@ void ClosTopology :: doAllToAllTcp(uint32_t totalNumberOfServers, const string s
     }
 }
 
+void ClosTopology :: doAllToAllPing(uint32_t totalNumberOfServers) {
+    for (uint32_t i = 0; i < totalNumberOfServers; i++) {
+        for (uint32_t j = 0; j < totalNumberOfServers; j++) {
+            if (i == j)
+                continue;
+            this->echoBetweenHosts(i, j);
+        }
+    }
+}
+
 std::tuple<ns3::Ptr<ns3::Node>, uint32_t, ns3::Ptr<ns3::Node>, uint32_t> ClosTopology :: getLinkInterfaceIndices(topology_level src_level, 
     uint32_t src_idx, topology_level dst_level, uint32_t dst_idx) 
 {
@@ -1166,6 +1200,7 @@ void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params) {
     // Simulation options
     cmd.AddValue("monitor", "Install FlowMonitor on the network", param_monitor);
     cmd.AddValue("scream", "Instruct all servers to scream at a given rate for the whole simulation", param_screamRate);
+    cmd.AddValue("pingall", "Instruct all servers to ping each other in the beginning", param_pingall);
     cmd.AddValue("micro", "Set time resolution to micro-seconds", param_micro);
     cmd.AddValue("noAcks", "Do not monitor ACKs", param_no_acks);
     cmd.AddValue("tcp", "Set the TCP variant to use", param_tcp_variant);
@@ -1325,6 +1360,11 @@ void setupMonitoringAndBeingExperiment(
         nodes->doAllToAllTcp(totalNumberOfServers, param_screamRate);
     }
 
+    if (param_pingall) {
+        SWARM_INFO("Doing a global ping");
+        nodes->doAllToAllPing(totalNumberOfServers);
+    }
+
     SWARM_INFO("Starting applications");
     if (flowScheduler)
         flowScheduler->begin();
@@ -1384,6 +1424,12 @@ int main(int argc, char *argv[]) {
     // Create the topology
     ClosTopology nodes = ClosTopology(topo_params);
     setupClosTopology(&nodes);
+
+    Ptr<OutputStreamWrapper> routingStream =
+        Create<OutputStreamWrapper>("swarm.routes", std::ios::out);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getEdge(1), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getAggregate(1), routingStream);
+    Ipv4RoutingHelper::PrintRoutingTableAt(Seconds(1.0), nodes.getCore(1), routingStream);
 
     // Setup FlowMonitor and begin the experiment
     #if MPI_ENABLED

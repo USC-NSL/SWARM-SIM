@@ -184,6 +184,7 @@ bool param_monitor = false;                   // Enable FlowMonitor and FCT repo
 bool param_plain_ecmp = false;                // Do plain ECMP
 bool param_use_cache = false;                 // Use ECMP/WCMP cache
 bool param_no_acks = false;                   // Do not monitor ACK flows
+bool param_pingall = false;                   // Pingall servers in the beginning
 
 #if MPI_ENABLED
 uint32_t param_pod_procs = DEFAULT_NUM_PODS;  // Number of processes for pod
@@ -318,6 +319,7 @@ class ClosTopology {
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void doAllToAllTcp(uint32_t totalNumberOfServers, const string scream_rate);
+        void doAllToAllPing(uint32_t totalNumberOfServers);
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];

@@ -48,9 +48,6 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         /// Whether or not to add a route when an interface comes up
         bool m_add_route_on_up;
 
-        /// Use plain ECMP
-        bool m_do_plain_ecmp;
-
         /// Number of levels for the WCMP hash atable
         uint16_t m_levels;
 
@@ -69,7 +66,6 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
 
         /// WCMP hash cache, speeds up lookup
         std::unordered_map<uint32_t, Ipv4RoutingTableEntry*> wcmp_cache;
-        std::unordered_map<uint32_t, Ipv4RoutingTableEntry*> ecmp_cache;
 
         /// Container for the network routes
         typedef std::list<std::pair<Ipv4RoutingTableEntry*, uint32_t>> NetworkRoutes;
@@ -98,30 +94,14 @@ class WcmpStaticRouting : public Ipv4RoutingProtocol {
         }
 
         Ipv4RoutingTableEntry* LookupCache(uint32_t hash_val, Ipv4Address dest) {
-            if (m_do_plain_ecmp) {
-                auto res = ecmp_cache.find(hash_val);
-                if (res == ecmp_cache.end())
-                    return nullptr;
-                return res->second;
-            }
-            else {
-                auto res = wcmp_cache.find(hash_val);
-                if (res == wcmp_cache.end())
-                    return nullptr;
-                
-                return res->second;
-            }
+            auto res = wcmp_cache.find(hash_val);
+            if (res == wcmp_cache.end())
+                return nullptr;
+            
+            return res->second;
         }
 
         void UpdateCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry);
-
-        void UpdateEcmpCache(uint32_t hash_val, Ipv4RoutingTableEntry *entry) {
-            auto res = ecmp_cache.find(hash_val);
-            if (res == ecmp_cache.end())
-                ecmp_cache[hash_val] = entry;
-            else
-                NS_ABORT_MSG("You should not be here!!!");
-        }
 
     public:
         static TypeId GetTypeId();

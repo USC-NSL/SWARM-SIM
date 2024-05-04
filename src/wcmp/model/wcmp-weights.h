@@ -22,6 +22,7 @@ class WcmpWeights {
 
     private:
         const uint16_t m_levels;
+        bool m_debug = false;
 
         /**
          * We have two maps:
@@ -92,11 +93,6 @@ class WcmpWeights {
          * If the interface exists, this does nothing.
         */
         void add_interface(uint32_t if_index, uint16_t weight = (uint16_t) DEFAULT_WCMP_WEIGHT);
-
-        /**
-         * A debug function to see if things look right
-        */
-        void printWeights();
 };
 
 } // Namespace wcmp

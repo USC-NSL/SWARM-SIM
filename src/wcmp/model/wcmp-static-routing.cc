@@ -45,13 +45,6 @@ WcmpStaticRouting :: GetTypeId() {
                 BooleanValue(false),
                 MakeBooleanAccessor(&WcmpStaticRouting::m_add_route_on_up),
                 MakeBooleanChecker()
-            )
-            .AddAttribute(
-                "ecmp",
-                "Whether or not to use plain ECMP",
-                BooleanValue(false),
-                MakeBooleanAccessor(&WcmpStaticRouting::m_do_plain_ecmp),
-                MakeBooleanChecker()
             );
     
     return tid;
@@ -132,12 +125,11 @@ WcmpStaticRouting :: MultiLpm(Ipv4Address dest) {
         Ipv4Address entry = (j)->GetDestNetwork();
 
         NS_LOG_LOGIC("LPM check for entry " << entry << "/" << (j)->GetDestNetworkMask() 
-        << " (" << metric << ")" << " --> " << j->GetInterface() << " against " << dest);
+            << " (" << metric << ")" << " --> " << j->GetInterface() << " against " << dest);
 
         if (mask.IsMatch(dest, entry))
         {
             // Found a route ...
-            NS_LOG_LOGIC("Found route");
             if (masklen < longest_mask)
             {
                 // Short match
@@ -180,60 +172,35 @@ WcmpStaticRouting :: MultiLpm(Ipv4Address dest) {
 Ptr<Ipv4Route>
 WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val)
 {   
+    NS_ABORT_MSG("This function should not be used!");
     Ipv4RoutingTableEntry *chosen = nullptr;
 
     // First, lookup the cache if it is enabled
     if (m_use_cache) 
         chosen = this->LookupCache(hash_val, dest);
 
-    if (m_do_plain_ecmp) {
-        if (!chosen) {
-            // Get equal cost LPM paths
-            std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
+    if (!chosen) {
+        // Get equal cost LPM paths
+        std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
 
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("LPM returned empty for " << dest);
-                return nullptr;
-            }
-
-            // Choose a routing table entry
-            chosen = this->weights.chooseEcmp(entries, hash_val);
-
-            if (m_use_cache)
-                this->UpdateEcmpCache(hash_val, chosen);
-        }
-
-        if (!chosen) {
-            // All interfaces are down
-            NS_LOG_LOGIC("All interfaces are down");
+        if (!entries.size()) {
+            // No routes exist
+            NS_LOG_LOGIC("LPM returned empty for " << dest);
             return nullptr;
         }
+
+        // Choose a routing table entry
+        uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
+        chosen = this->weights.choose(entries, hash_val, level);
+
+        if (m_use_cache)
+            this->UpdateCache(hash_val, chosen);
     }
-    else {
-        if (!chosen) {
-            // Get equal cost LPM paths
-            std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
 
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("LPM returned empty for " << dest);
-                return nullptr;
-            }
-
-            // Choose a routing table entry
-            uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
-            chosen = this->weights.choose(entries, hash_val, level);
-
-            if (m_use_cache)
-                this->UpdateCache(hash_val, chosen);
-        }
-
-        if (!chosen) {
-            // All interfaces are down
-            NS_LOG_LOGIC("All interfaces are down");
-            return nullptr;
-        }
+    if (!chosen) {
+        // All interfaces are down
+        NS_LOG_LOGIC("All interfaces are down");
+        return nullptr;
     }
 
     // Output the routing entry
@@ -254,82 +221,52 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
     Ipv4RoutingTableEntry *chosen = nullptr;
 
     // First, lookup the cache if it is enabled
-    if (m_use_cache)
+    if (m_use_cache) 
         chosen = this->LookupCache(hash_val, dest);
 
-    if (m_do_plain_ecmp) {
-        if (!chosen) {
-            // Get equal cost LPM paths
-            std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
-
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("LPM returned empty for " << dest);
-                return nullptr;
-            }
-
-            // Remove any route that is attached to the same input interface
-            entries.erase(std::remove_if(entries.begin(), entries.end(), 
-                [iif](Ipv4RoutingTableEntry* entry) {return entry->GetInterface() == iif;}
-            ), entries.end());
-
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("We have a loop! " << dest);
-                return nullptr;
-            }
-
-            // Choose a routing table entry
-            chosen = this->weights.chooseEcmp(entries, hash_val);
-
-            if (m_use_cache)
-                this->UpdateEcmpCache(hash_val, chosen);
-        }
-        else {
-            if (chosen->GetInterface() == iif)
-                return nullptr;
-        }
-    }
-    else {
-        if (!chosen) {
-            // Get equal cost LPM paths
-            std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
-
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("LPM returned empty for " << dest);
-                return nullptr;
-            }
-
-            // Remove any route that is attached to the same input interface
-            entries.erase(std::remove_if(entries.begin(), entries.end(), 
-                [iif](Ipv4RoutingTableEntry* entry) {return entry->GetInterface() == iif;}
-            ), entries.end());
-
-            if (!entries.size()) {
-                // No routes exist
-                NS_LOG_LOGIC("We have a loop! " << dest);
-                return nullptr;
-            }
-
-            // Choose a routing table entry
-            uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
-            NS_LOG_LOGIC("Level mapper chose " << level << " for destination " << dest);
-            chosen = this->weights.choose(entries, hash_val, level);
-
-            if (m_use_cache)
-                this->UpdateCache(hash_val, chosen);
-        }
-        else {
-            if (chosen->GetInterface() == iif)
-                return nullptr;
-        }
-    }
-
     if (!chosen) {
-        // All interfaces are down
-        NS_LOG_LOGIC("All interfaces are down");
-        return nullptr;
+            // Get equal cost LPM paths
+        std::vector<Ipv4RoutingTableEntry*> entries = this->MultiLpm(dest);
+
+        if (!entries.size()) {
+            // No routes exist
+            NS_LOG_LOGIC("LPM returned empty for " << dest);
+            return nullptr;
+        }
+
+        // Remove any route that is attached to the same input interface
+        entries.erase(std::remove_if(entries.begin(), entries.end(), 
+            [iif](Ipv4RoutingTableEntry* entry) {return entry->GetInterface() == iif;}
+        ), entries.end());
+
+        if (!entries.size()) {
+            // No routes exist
+            NS_LOG_LOGIC("We have a loop! " << dest);
+            return nullptr;
+        }
+
+        // Choose a routing table entry
+        uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
+        NS_LOG_LOGIC("Level mapper chose " << level << " for destination " << dest << " , calling CHOOSE");
+        chosen = this->weights.choose(entries, hash_val, level);
+
+        if (m_use_cache)
+            this->UpdateCache(hash_val, chosen);
+
+        if (chosen)
+            NS_LOG_LOGIC("Lookup chose " << chosen->GetInterface() << " on level " << level);
+
+        if (chosen->GetInterface() == iif) {
+            NS_LOG_WARN("We have loop!");
+            return nullptr;
+        }
+
+        if (!chosen) {
+            // All interfaces are down
+            NS_LOG_LOGIC("All interfaces are down");
+            return nullptr;
+        }
+
     }
 
     // Output the routing entry
@@ -338,8 +275,6 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
     rtentry->SetSource(m_ipv4->SourceAddressSelection(chosen->GetInterface(), chosen->GetDest()));
     rtentry->SetGateway(chosen->GetGateway());
     rtentry->SetOutputDevice(m_ipv4->GetNetDevice(chosen->GetInterface()));
-
-    // NS_LOG_LOGIC("WCMP lookup chose " << chosen->GetInterface() << " on level " << level);
 
     return rtentry;
 }
@@ -365,7 +300,6 @@ WcmpStaticRouting :: RouteOutput(Ptr<Packet> p,
 
     // Hash the packet
     uint32_t hash_val = this->hasher.getHash(p, header);
-    NS_LOG_LOGIC("WCMP hash for packet = " << hash_val);
 
     // Lookup for a route
     rtentry = LookupWcmp(destination, hash_val);
@@ -432,7 +366,6 @@ WcmpStaticRouting :: RouteInput(Ptr<const Packet> p,
 
     // Hash the packet
     uint32_t hash_val = this->hasher.getHash(p, ipHeader);
-    NS_LOG_LOGIC("WCMP hash for packet = " << hash_val);
 
     // Next, try to find a route
     Ptr<Ipv4Route> rtentry = LookupWcmp(ipHeader.GetDestination(), hash_val, iif);

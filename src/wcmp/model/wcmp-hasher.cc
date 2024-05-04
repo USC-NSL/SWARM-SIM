@@ -13,14 +13,16 @@ namespace wcmp
 {
 
 WcmpHasher :: WcmpHasher() {
+    salt = (uint32_t) random();
 }
 
 uint32_t
 WcmpHasher :: getHashIpv4(Ptr<const Packet> p, const Ipv4Header& header) {
-    uint8_t buf[8];
+    uint8_t buf[12];
 
     header.GetSource().Serialize(buf);
     header.GetDestination().Serialize(buf + 4);
+    memcpy(buf + 8, &salt, 4);
 
     this->m_hasher.clear();
     return this->m_hasher.GetHash32((char*) buf, 8);
@@ -32,7 +34,7 @@ WcmpHasher :: getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header) {
         return getHashIpv4(p, header);
     }
 
-    uint8_t buf[12];
+    uint8_t buf[16];
     
     TcpHeader tcpHeader;
     p->PeekHeader(tcpHeader);
@@ -43,9 +45,10 @@ WcmpHasher :: getHashIpv4Tcp(Ptr<const Packet> p, const Ipv4Header& header) {
     memcpy(buf + 8, &port, 2);
     port = tcpHeader.GetDestinationPort();
     memcpy(buf + 10, &port, 2);
+    memcpy(buf + 12, &salt, 4);
 
     this->m_hasher.clear();
-    return this->m_hasher.GetHash32((char *) buf, 12);
+    return this->m_hasher.GetHash32((char *) buf, 16);
 }
 
 uint32_t
@@ -54,7 +57,7 @@ WcmpHasher :: getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header) {
         return getHashIpv4(p, header);
     }
 
-    uint8_t buf[12];
+    uint8_t buf[16];
     
     if (header.GetProtocol() == UDP_PROTOCOL) {
         UdpHeader udpHeader;;
@@ -66,9 +69,10 @@ WcmpHasher :: getHashIpv4TcpUdp(Ptr<const Packet> p, const Ipv4Header& header) {
         memcpy(buf + 8, &port, 2);
         port = udpHeader.GetDestinationPort();
         memcpy(buf + 10, &port, 2);
+        memcpy(buf + 12, &salt, 4);
 
         this->m_hasher.clear();
-        return this->m_hasher.GetHash32((char *) buf, 12);
+        return this->m_hasher.GetHash32((char *) buf, 16);
     }
     else {
         return this->getHashIpv4Tcp(p, header);
@@ -88,34 +92,6 @@ WcmpHasher :: getHash(Ptr<const Packet> p, const Ipv4Header& header) {
         default:
             NS_ABORT_MSG("Bad hash alg");
     }
-}
-
-std::string 
-WcmpHasher :: dump_packet(Ptr<const Packet> p, const Ipv4Header& header) {
-    std::string out;
-    
-    if (header.GetProtocol() == UDP_PROTOCOL) {
-        out += "UDP: ";
-        UdpHeader udpHeader;;
-        p->PeekHeader(udpHeader);
-        
-        out += "Source = ";
-        out += std::to_string(udpHeader.GetSourcePort());
-        out += " Destination = ";
-        out += std::to_string(udpHeader.GetDestinationPort());
-    }
-    else {
-        out += "TCP: ";
-        TcpHeader tcpHeader;;
-        p->PeekHeader(tcpHeader);
-        
-        out += "Source = ";
-        out += std::to_string(tcpHeader.GetSourcePort());
-        out += " Destination = ";
-        out += std::to_string(tcpHeader.GetDestinationPort());
-    }
-
-    return out;
 }
     
 } // namespace wcmp
