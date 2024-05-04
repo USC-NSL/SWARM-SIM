@@ -44,4 +44,4 @@ echo "******** LOW LOSS DOWN ********"
 ../ns3/ns3 run --command-template="$template_disable_low" swarm
 
 echo "******** BOTH LINKS DOWN ********"
-./ns3 run --command-template="$template_disable_both" swarm
+../ns3/ns3 run --command-template="$template_disable_both" swarm
