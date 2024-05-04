@@ -95,7 +95,9 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
 
         // Is the interface up?
         if (this->states[if_index]) {
+            NS_LOG_LOGIC("Considering if_index " << if_index);
             sum += this->weights[_GET_LEVELED_IF(level, if_index)];
+            NS_LOG_LOGIC("Current sum is " << sum);
             up_entries.push_back(std::make_pair(it, sum));
         }
     }
@@ -113,9 +115,13 @@ WcmpWeights :: choose(std::vector<Ipv4RoutingTableEntry*> equal_cost_entries, ui
         return up_entries.at(0).first;
     }
 
+    NS_LOG_LOGIC("Sum is " << sum);
+
     std::vector<std::pair<Ipv4RoutingTableEntry*, uint32_t>>::iterator it;
     for (it = up_entries.begin(); it != up_entries.end(); it++) {
+        NS_LOG_LOGIC("Comparing " << hash_val << " with boundry " << it->second);
         if ((uint64_t) hash_val * sum < (uint64_t) it->second * UINT32_MAX) {
+            NS_LOG_LOGIC("Accepting output " << it->first);
             return it->first;
         }
     }

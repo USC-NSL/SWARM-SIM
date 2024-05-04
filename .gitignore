@@ -2,4 +2,5 @@ ns3
 *.o
 __pycache__
 results
+old-results
 gen

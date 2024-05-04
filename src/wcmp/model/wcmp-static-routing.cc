@@ -314,6 +314,7 @@ WcmpStaticRouting :: LookupWcmp(Ipv4Address dest, uint32_t hash_val, uint32_t ii
 
             // Choose a routing table entry
             uint16_t level = this->m_level_mapper_func ? (this->m_level_mapper_func)(dest) : 0;
+            NS_LOG_LOGIC("Level mapper chose " << level << " for destination " << dest);
             chosen = this->weights.choose(entries, hash_val, level);
 
             if (m_use_cache)

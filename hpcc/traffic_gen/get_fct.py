@@ -26,10 +26,9 @@ from scapy.all import PcapReader, IP, TCP
 NUM_PODS = 2
 SWITCH_RADIX = 4
 NUM_SERVERS = 2
-TCP_DST_PORT = 10
-NO_ACKS = False
 
 T_START = 1.5
+SMALL_FLOW_THRESHOLD = 150 * 1024
 
 
 def map_ip_to_host_idx(ip):
@@ -45,64 +44,13 @@ def map_ip_to_host_idx(ip):
     return pod_num * NUM_SERVERS * SWITCH_RADIX // 2 + tor_num * NUM_SERVERS + server_num
 
 
-class MpiPcapReader:
-    def __init__(self, dir_path) -> None:
-        self.dir_path = dir_path
-        self.fcts = {}
-
-    @staticmethod
-    def list_pcaps(dir_path):
-        ls = list(filter(lambda elem: elem.endswith('.pcap'), os.listdir(dir_path)))
-        if len(ls) == 0:
-            print("No PCAP files found in the given directory. Aborting")
-            sys.exit(-1)
-
-        print(f"Found {len(ls)} PCAP files in {dir_path}")
-
-        return ls
-    
-    @staticmethod
-    def get_host_idx_from_pcap_file_name(pcap_file_name):
-        ls = pcap_file_name.split('-')
-        return int(ls[-1].replace('.pcap', ''))
-    
-    def parse_pcap(self, pcap_file_name):
-        pcap_file_path = os.path.join(self.dir_path, pcap_file_name)
-        pcap_reader = PcapReader(pcap_file_path)
-        host_idx = self.get_host_idx_from_pcap_file_name(pcap_file_name)
-        print(f'host_idx for {pcap_file_name} == {host_idx}')
-
-        stray_count = 0
-        try:
-            while True:
-                packet = next(pcap_reader)
-                # print(f"{packet[IP].src}:{packet[TCP].sport} --> {packet[IP].dst}:{packet[TCP].dport}: {len(packet)}")
-                if packet[TCP].dport == TCP_DST_PORT:
-                    if not ((map_ip_to_host_idx(packet[IP].src) == host_idx or map_ip_to_host_idx(packet[IP].dst) == host_idx) and TCP in packet):
-                        stray_count += 1
-                    # print(f'{packet.time}: From host {map_ip_to_host_idx(packet[IP].src)} to {map_ip_to_host_idx(packet[IP].dst)}')
-        except StopIteration:
-            print("Parsing finished")
-        except KeyboardInterrupt:
-            print("Aborting execution")
-            return -1
-        finally:
-            print(f"Number of stray packets: {stray_count}")
-            pcap_reader.close()
-
-    def parse_all_pcaps(self):
-        pcap_file_names = self.list_pcaps(self.dir_path)
-        for pcap_file_name in pcap_file_names:
-            if self.parse_pcap(pcap_file_name):
-                sys.exit(-1)
-
-
 class FlowMonitorXmlParser:
     def __init__(self, paths) -> None:
         self.paths = paths
         # Map flow id to `(size, flow_completion_time)`
-        self.fcts = {}
-        self.ack_ids = []
+        self.fcts_small = {}
+        # Map flow id to throughput
+        self.tps_large = {}
         self.min_start_tx = None
         self.max_last_rx = None
 
@@ -115,26 +63,35 @@ class FlowMonitorXmlParser:
     def parse_flow_files(self):
         for path in self.paths:
             self.parse_flow_file(path)
-
-        if NO_ACKS:
-            for ack_id in self.ack_ids:
-                self.fcts.pop(ack_id, None)
                 
         print(f"Results for {self.paths[0]}")
-        print(f"Parsed {len(self.fcts)} flows")
+        print(f"Parsed {len(self.fcts_small)} small flows")
+        print(f"Parsed {len(self.tps_large)} large flows")
         print(f"Flows between {self.min_start_tx} and {self.max_last_rx}")
-        print(f"FCT p99 is {np.percentile([1000 * elem[1] for elem in self.fcts.values()], 99)}")
+        print(f"Short flow FCT p99 is {np.percentile([1000 * elem[1] for elem in self.fcts_small.values()], 99)} ms")
+        print(f"Long flow TP p1 is {8 * np.percentile([elem[1] for elem in self.tps_large.values()], 1)} bps")
     
     @staticmethod
-    def plot_cdf(fcts, log_scale=True):
+    def plot_fct_cdf(fcts, log_scale=True):
         sns.ecdfplot(
             [1000 * elem[1] for elem in fcts.values()], 
             stat='proportion', 
             log_scale=log_scale
         )
 
+    @staticmethod
+    def plot_tp_cdf(tps, log_scale=True):
+        sns.ecdfplot(
+            [1000 * elem[1] for elem in tps.values()], 
+            stat='proportion', 
+            log_scale=log_scale
+        )
+
     def get_fcts(self):
-        return self.fcts
+        return self.fcts_small
+    
+    def get_tps(self):
+        return self.tps_large
     
     def parse_flow_file(self, path):
         context = ET.iterparse(path, events=("start", "end"))
@@ -171,17 +128,24 @@ class FlowMonitorXmlParser:
                     assert tag == 'Flow'
                     if parsing_flow_stats:
                         attrib = elem.attrib
-                        assert int(attrib['flowId']) not in self.fcts
+                        assert int(attrib['flowId']) not in self.fcts_small
+                        assert int(attrib['flowId']) not in self.tps_large
                         # assert self.parse_time_ns(attrib['timeLastRxPacket']) > 0
                         # assert self.parse_time_ns(attrib['timeFirstTxPacket']) > 0
                         t_start = self.parse_time_ns(attrib['timeFirstTxPacket']) * 1e-9
                         t_finish = self.parse_time_ns(attrib['timeLastRxPacket']) * 1e-9
 
                         if t_start >= T_START:
-                            self.fcts[int(attrib['flowId'])] = (
-                                int(attrib['rxBytes']),
-                                (t_finish - t_start)
-                            )
+                            if int(attrib['rxBytes']) < SMALL_FLOW_THRESHOLD:
+                                self.fcts_small[int(attrib['flowId'])] = (
+                                    int(attrib['rxBytes']),
+                                    (t_finish - t_start)
+                                )
+                            else:
+                                self.tps_large[int(attrib['flowId'])] = (
+                                    int(attrib['rxBytes']),
+                                    int(attrib['rxBytes']) / (t_finish - t_start)
+                                )
                             
                             if not self.min_start_tx:
                                 self.min_start_tx = t_start
@@ -197,9 +161,6 @@ class FlowMonitorXmlParser:
                         
                         level += 1
                     elif parsing_flow_class:
-                        attrib = elem.attrib
-                        if (int(attrib['sourcePort']) == TCP_DST_PORT) and NO_ACKS:
-                            self.ack_ids.append(int(attrib['flowId']))
                         level += 1
                         pass
                 else:
@@ -229,11 +190,16 @@ class FlowMonitorXmlParser:
             elem.clear()
         
 
-def plot_cdfs(all_fcts):
-    FlowMonitorXmlParser.plot_cdf(all_fcts)
-
+def plot_cdfs(all_fcts, all_tps):
+    plt.subplot(1, 2, 1)
+    FlowMonitorXmlParser.plot_fct_cdf(all_fcts)
     plt.ylabel("CDF")
-    plt.xlabel("FCT (ms)")
+    plt.xlabel("Short flow FCTs (ms)")
+
+    plt.subplot(1, 2, 2)
+    FlowMonitorXmlParser.plot_tp_cdf(all_tps)
+    plt.ylabel("CDF")
+    plt.xlabel("Large flow TPs (Byte/sec)")
 
 
 if __name__ == '__main__':
@@ -242,12 +208,8 @@ if __name__ == '__main__':
     parser.add_argument('dir', help="Path to the directory containing the flow monitor output")
     parser.add_argument('names', nargs='+', help="Prefix name of the outputs")
     parser.add_argument('--mpi', help="Number of MPI outputs")
-    parser.add_argument('--no-acks', action='store_true', help="Do not consider ACK flows")
 
     args = parser.parse_args()
-
-    if args.no_acks:
-        NO_ACKS = True
     
     if args.mpi:
         for name in args.names:
@@ -259,7 +221,7 @@ if __name__ == '__main__':
             flow_monitor_parser = FlowMonitorXmlParser(paths)
             flow_monitor_parser.parse_flow_files()
 
-            plot_cdfs(flow_monitor_parser.get_fcts())
+            plot_cdfs(flow_monitor_parser.get_fcts(), flow_monitor_parser.get_tps())
     else:
         paths = []
         for name in args.names:
@@ -269,7 +231,7 @@ if __name__ == '__main__':
             flow_monitor_parser = FlowMonitorXmlParser(paths)
             flow_monitor_parser.parse_flow_files()
 
-            plot_cdfs(flow_monitor_parser.get_fcts())
+            plot_cdfs(flow_monitor_parser.get_fcts(), flow_monitor_parser.get_tps())
 
     plt.legend(args.names)
     plt.show()

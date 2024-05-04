@@ -933,7 +933,7 @@ void ClosTopology :: doUpdateWcmp(topology_level node_level, uint32_t node_idx, 
 
     WcmpStaticRoutingHelper wcmp((uint16_t) (this->params.numPods * this->params.switchRadix / 2), wcmp_level_mapper);
     Ptr<Ipv4> ipv4 = node->GetObject<Ipv4>();
-    SWARM_DEBG("Mitigating link change on node " << node_level << " " << node_idx 
+    SWARM_DEBG_ALL("Mitigating link change on node " << node_level << " " << node_idx 
         << " : For interface " << interface_idx << " towards level " << level << " to weight " << weight);
     wcmp.SetInterfaceWeight(ipv4, interface_idx, level, weight);
 }
@@ -1021,9 +1021,14 @@ uint16_t torLevelMapper(ns3::Ipv4Address dest, const topology_descriptor_t *topo
      * In this WCMP scheme, the level is equal to the tor index.
     */
     uint32_t ipaddr_val = dest.Get();
-    uint8_t *p = (uint8_t *)&ipaddr_val;
+    uint32_t p[4];
+    
+    p[0] = (ipaddr_val & 0x000000ff);
+    p[1] = (ipaddr_val & 0x0000ff00) >> 8;
+    p[2] = (ipaddr_val & 0x00ff0000) >> 16;
+    p[3] = (ipaddr_val & 0xff000000) >> 24;
 
-    return (uint16_t) p[1] * topo_params->switchRadix/2 + p[2];
+    return (uint16_t) p[2] * topo_params->switchRadix/2 + p[1];
 }
 
 void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
