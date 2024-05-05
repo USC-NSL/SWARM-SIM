@@ -1007,6 +1007,8 @@ void ClosTopology :: doSetLinkLoss(topology_level src_level, uint32_t src_idx, t
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->SetAttribute("ReceiveErrorModel", PointerValue(em));
     std::get<2>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<3>(props))->SetAttribute("ReceiveErrorModel", PointerValue(em));
+
+    NS_ASSERT(em->IsEnabled());
 }
 
 void disableLink(ClosTopology *topology, topology_level src_level, uint32_t src_idx, topology_level dst_level, 
@@ -1107,8 +1109,7 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     if ((ptr = topo->getLocalHost(flow->src))) {
         singleFlowClient.SetAttribute("Remote", AddressValue(InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT)));
         singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        // singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
-        singleFlowClient.SetAttribute("PacketSize", UintegerValue(6000));
+        singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
         singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
         singleFlowClient.Install(ptr).Start(Time(0));
     }
