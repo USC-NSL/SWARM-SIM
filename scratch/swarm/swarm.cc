@@ -1129,7 +1129,8 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     if ((ptr = topo->getLocalHost(flow->src))) {
         singleFlowClient.SetAttribute("Remote", AddressValue(InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT)));
         singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
-        singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        // singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
+        singleFlowClient.SetAttribute("PacketSize", UintegerValue(6000));
         singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
         singleFlowClient.Install(ptr).Start(Time(0));
     }
