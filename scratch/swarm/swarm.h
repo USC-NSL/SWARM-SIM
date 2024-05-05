@@ -117,6 +117,7 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 */
 #define UDP_DISCARD_PORT 9
 #define TCP_DISCARD_PORT 10
+#define TCP_LOCAL_START_PORT 20
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
@@ -262,9 +263,6 @@ class ClosTopology {
 
         // Application containers for each server
         vector<ns3::ApplicationContainer> serverApplications;
-
-        // Used to get a free port for a host
-        unordered_map<uint32_t, uint16_t> portMap;
  
         #if NETANIM_ENABLED
         ns3::AnimationInterface *anim = NULL;
@@ -448,24 +446,6 @@ class ClosTopology {
             return edge_idx / sysIdStep;
         }
 
-        uint16_t getNextPort(uint32_t host_idx) {
-            return this->portMap[host_idx]++;
-        }
-
-        uint16_t getNextPort(uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
-            uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
-            return this->portMap[host_idx]++;
-        }
-
-        void addHostToPortMap(uint32_t host_idx) {
-            this->portMap[host_idx] = UDP_DISCARD_PORT;
-        }
-
-        void addHostToPortMap(uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
-            uint32_t host_idx = (pod_num * this->params.switchRadix/2 + edge_idx) * this->params.numServers + server_idx;
-            addHostToPortMap(host_idx);
-        }
-
         void printSystemIds() {
             #if MPI_ENABLED
             SWARM_DEBG("Printing topology system identifiers");
@@ -575,5 +555,28 @@ void setupMonitoringAndBeingExperiment(
     ClosTopology *nodes, 
     uint32_t totalNumberOfServers,
     std::string flow_output_file_name);
+
+
+// Used to get a free port for a host
+unordered_map<uint32_t, uint16_t> portMap;
+
+
+uint16_t getNextPort(uint32_t host_idx) {
+    if (portMap[host_idx] == UINT16_MAX) {
+        portMap[host_idx] = TCP_LOCAL_START_PORT;
+        return UINT16_MAX;
+    }
+    
+    return portMap[host_idx]++;
+}
+
+void addHostToPortMap(uint32_t host_idx) {
+    portMap[host_idx] = TCP_LOCAL_START_PORT;
+}
+
+void addHostToPortMap(ClosTopology *topo, uint32_t pod_num, uint32_t edge_idx, uint32_t server_idx) {
+    uint32_t host_idx = (pod_num * topo->params.switchRadix/2 + edge_idx) * topo->params.numServers + server_idx;
+    addHostToPortMap(host_idx);
+}
 
 #endif /* SWARM_H */

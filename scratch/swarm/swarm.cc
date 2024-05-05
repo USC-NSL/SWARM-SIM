@@ -243,7 +243,7 @@ void ClosTopology :: createServers() {
 
             for (uint32_t i = 0; i < this->params.numServers; i++) {
                 this->serverApplications.push_back(ApplicationContainer());
-                this->addHostToPortMap(pod_num, edge_idx, i);
+                addHostToPortMap(this, pod_num, edge_idx, i);
             }
             ++sysIdCounter;
         }
@@ -820,7 +820,7 @@ void ClosTopology :: echoBetweenHosts(uint32_t client_host, uint32_t server_host
 }
 
 void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
-    uint32_t port = this->getNextPort(server_host);
+    uint32_t port = getNextPort(server_host);
     Ptr<Node> ptr;
     
     if ((ptr = this->getLocalHost(server_host))) {
@@ -843,7 +843,7 @@ void ClosTopology :: unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_
 }
 
 void ClosTopology :: bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate) {
-    uint32_t port = this->getNextPort(server_host);
+    uint32_t port = getNextPort(server_host);
     Ptr<Node> ptr;
 
     if ((ptr = this->getLocalHost(server_host))) {
@@ -1129,6 +1129,7 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo) {
     if ((ptr = topo->getLocalHost(flow->src))) {
         singleFlowClient.SetAttribute("Remote", AddressValue(InetSocketAddress(topo->getServerAddress(flow->dst), TCP_DISCARD_PORT)));
         singleFlowClient.SetAttribute("DataRate", StringValue(std::to_string(topo->params.linkRate) + "Gbps"));
+        singleFlowClient.SetAttribute("Local", AddressValue(InetSocketAddress(topo->getServerAddress(flow->src), getNextPort(flow->src))));
         // singleFlowClient.SetAttribute("PacketSize", UintegerValue(TCP_PACKET_SIZE));
         singleFlowClient.SetAttribute("PacketSize", UintegerValue(6000));
         singleFlowClient.SetAttribute("FlowSize", UintegerValue(flow->size));
