@@ -933,6 +933,9 @@ void ClosTopology :: doDisableLink(topology_level src_level, uint32_t src_idx, t
     SWARM_DEBG("Disabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
+    // First, check if this actually works with MPI
+    NS_ASSERT(std::get<0>(props)->GetSystemId() == std::get<2>(props)->GetSystemId());
+
     std::get<0>(props)->GetObject<Ipv4>()->SetDown(std::get<1>(props));
     std::get<2>(props)->GetObject<Ipv4>()->SetDown(std::get<3>(props));
 
@@ -950,6 +953,9 @@ void ClosTopology :: doEnableLink(topology_level src_level, uint32_t src_idx, to
     SWARM_DEBG_ALL("Enabling interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
+    // First, check if this actually works with MPI
+    NS_ASSERT(std::get<0>(props)->GetSystemId() == std::get<2>(props)->GetSystemId());
+
     std::get<0>(props)->GetObject<Ipv4>()->SetUp(std::get<1>(props));
     std::get<2>(props)->GetObject<Ipv4>()->SetUp(std::get<3>(props));
 
@@ -966,6 +972,9 @@ void ClosTopology :: doChangeBandwidth(topology_level src_level, uint32_t src_id
     SWARM_DEBG_ALL("Changing bandwidth on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
 
+    // First, check if this actually works with MPI
+    NS_ASSERT(std::get<0>(props)->GetSystemId() == std::get<2>(props)->GetSystemId());
+
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
     std::get<2>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<3>(props))->SetAttribute("DataRate", ns3::StringValue(dataRateStr));
 }
@@ -977,6 +986,9 @@ void ClosTopology :: doChangeDelay(topology_level src_level, uint32_t src_idx, t
 
     SWARM_DEBG_ALL("Changing delay on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props));
+
+    // First, check if this actually works with MPI
+    NS_ASSERT(std::get<0>(props)->GetSystemId() == std::get<2>(props)->GetSystemId());
 
     std::get<0>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<1>(props))->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
     std::get<2>(props)->GetObject<Ipv4>()->GetNetDevice(std::get<3>(props))->GetChannel()->SetAttribute("Delay", ns3::StringValue(delayStr));
@@ -1005,6 +1017,9 @@ void ClosTopology :: doSetLinkLoss(topology_level src_level, uint32_t src_idx, t
 
     SWARM_DEBG_ALL("Setting packet drop rate on interfaces " << src_level << ":" << src_idx << ":" << std::get<1>(props)
         << " ---- " << dst_level << ":" << dst_idx << ":" << std::get<3>(props) << " to " << packetLossRate);
+
+    // First, check if this actually works with MPI
+    NS_ASSERT(std::get<0>(props)->GetSystemId() == std::get<2>(props)->GetSystemId());
 
     Ptr<RateErrorModel> em = CreateObject<RateErrorModel>();
     em->SetRate(atof(packetLossRate.c_str()));
