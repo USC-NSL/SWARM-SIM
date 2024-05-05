@@ -1,0 +1,47 @@
+#!/bin/bash
+
+
+if [ "$#" -ne 1 ]; then
+    echo "Usage: ./sample-all-actions-oversub.sh <n>"
+    exit 1;
+fi
+
+template_no_action="mpiexec -np 64 %s \
+    --mpi --podLps=64 --coreLps=64 --offloadAgg \ 
+    --numPods=8 --switchRadix=16 --numServers=16 --linkRate=20Gbps --linkDelay=100us \
+    --end=10.0 \
+    --monitor --noAcks --until=1.0 \
+    --flow=traffic-oversub$1.txt --out=fct-oversub-no-action-$1 --scenario=scenario-oversub-no-action.txt"
+
+template_disable_high="mpiexec -np 64 %s \
+    --mpi --podLps=64 --coreLps=64 --offloadAgg \ 
+    --numPods=8 --switchRadix=16 --numServers=16 --linkRate=20Gbps --linkDelay=100us \
+    --end=10.0 \
+    --monitor --noAcks --until=1.0 \
+    --flow=traffic-oversub$1.txt --out=fct-oversub-disable-high-$1 --scenario=scenario-oversub-disable-high-loss.txt"
+
+template_disable_low="mpiexec -np 64 %s \
+    --mpi --podLps=64 --coreLps=64 --offloadAgg \ 
+    --numPods=8 --switchRadix=16 --numServers=16 --linkRate=20Gbps --linkDelay=100us \
+    --end=10.0 \
+    --monitor --noAcks --until=1.0 \
+    --flow=traffic-oversub$1.txt --out=fct-oversub-disable-low-$1 --scenario=scenario-oversub-disable-low-loss.txt"
+
+template_disable_both="mpiexec -np 64 %s \
+    --mpi --podLps=64 --coreLps=64 --offloadAgg \ 
+    --numPods=8 --switchRadix=16 --numServers=16 --linkRate=20Gbps --linkDelay=100us \
+    --end=10.0 \
+    --monitor --noAcks --until=1.0 \
+    --flow=traffic-oversub$1.txt --out=fct-oversub-disable-both-$1 --scenario=scenario-oversub-disable-both.txt"
+
+echo "******** NO ACTION ********"
+../ns3/ns3 run --command-template="$template_no_action" swarm
+
+echo "******** HIGH LOSS DOWN ********"
+../ns3/ns3 run --command-template="$template_disable_high" swarm
+
+echo "******** LOW LOSS DOWN ********"
+../ns3/ns3 run --command-template="$template_disable_low" swarm
+
+echo "******** BOTH LINKS DOWN ********"
+../ns3/ns3 run --command-template="$template_disable_both" swarm
