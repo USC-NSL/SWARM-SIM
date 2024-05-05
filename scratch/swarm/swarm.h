@@ -191,8 +191,12 @@ uint32_t param_pod_procs = DEFAULT_NUM_PODS;  // Number of processes for pod
 uint32_t param_core_procs = DEFAULT_NUM_PODS; // Number of processes for core switches
 bool param_offlaod_core = false;              // Use separate processes for cores
 bool param_offload_aggs = false;              // Use separate processes for aggregates
-bool param_first_core_0 = true;
-bool param_first_agg_0 = true;
+
+bool param_first_core_0 = true;               // If true, core index 0 always goes to systemId 0
+bool param_first_agg_0 = false;               // If true, aggregation index `r/2` and edge index `r/2`
+                                              // always go to the the same systemId
+bool param_second_agg_0 = true;               // If true, aggregation index `r/2 + 1` and edge 
+                                              // index `r/2 + 1` always go to the the same systemId
 #endif
 
 std::string param_tcp_variant = "TcpDctcp";   // TCP variant to use
@@ -553,8 +557,10 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseEcn", ns3::BooleanValue (true));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseHardDrop", ns3::BooleanValue (false));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (1500));
-    ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("50000p")));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("5000p")));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::QW", ns3::DoubleValue (1));
+
+    SWARM_INFO("Using TCP " + param_tcp_variant);
 }
 
 void parseCmd(int argc, char* argv[], topolgoy_descriptor *topo_params);

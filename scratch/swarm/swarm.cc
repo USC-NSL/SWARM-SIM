@@ -99,6 +99,11 @@ void ClosTopology :: createPodMPI() {
                     edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
                     continue;
                 }
+                else if (i == 1 && j == 1 && param_second_agg_0) {
+                    aggs.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+                    edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
+                    continue;
+                }
                 aggs.Add(CreateObject<Node>((sysIdCounter / sysIdStep) + (param_pod_procs / 2)));
                 edges.Add(CreateObject<Node>(sysIdCounter / sysIdStep));
             }
