@@ -223,8 +223,8 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
     return rttCounts;
 }
 
-std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
-    std::vector<uint32_t> delays;
+std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
+    std::vector<int> delays;
     if (systemId == 0)
         std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
     usleep(500);
@@ -442,7 +442,7 @@ void doDelayTest() {
      *     Queue Delay Analysis
      ********************************/
 
-    std::map<std::tuple<uint32_t, double>, std::vector<uint32_t>> queueDelays;    
+    std::map<std::tuple<uint32_t, double>, std::vector<int>> queueDelays;    
     std::ofstream output;
 
     output.open("delays-" + std::to_string(systemId) + ".csv");

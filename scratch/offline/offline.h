@@ -69,7 +69,7 @@ std::vector<uint32_t> rttAnalysis(
     uint32_t rtt, 
     uint32_t flowSize);
 
-std::vector<uint32_t> queueDelayAnalysis(
+std::vector<int> queueDelayAnalysis(
     uint32_t N, 
     uint32_t M);
 
