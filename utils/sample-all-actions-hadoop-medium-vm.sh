@@ -7,28 +7,28 @@ if [ "$#" -ne 1 ]; then
 fi
 
 template_no_action="mpiexec -np 48 %s \
-    --mpi --podLps=48 --coreLps=16 --offloadAgg \ 
+    --mpi --podLps=32 --coreLps=16 --offloadAgg --offloadCore \ 
     --numPods=8 --switchRadix=8 --numServers=4 --linkRate=20Gbps --linkDelay=100us \
     --end=10.0 \
     --monitor --noAcks --until=1.0 \
     --flow=traffic-hadoop$1.txt --out=fct-no-action-$1 --scenario=scenario-no-action.txt"
 
 template_disable_high="mpiexec -np 48 %s \
-    --mpi --podLps=48 --coreLps=16 --offloadAgg \ 
+    --mpi --podLps=32 --coreLps=16 --offloadAgg --offloadCore \ 
     --numPods=8 --switchRadix=8 --numServers=4 --linkRate=20Gbps --linkDelay=100us \
     --end=10.0 \
     --monitor --noAcks --until=1.0 \
     --flow=traffic-hadoop$1.txt --out=fct-disable-high-$1 --scenario=scenario-disable-high-loss.txt"
 
 template_disable_low="mpiexec -np 48 %s \
-    --mpi --podLps=48 --coreLps=16 --offloadAgg \ 
+    --mpi --podLps=32 --coreLps=16 --offloadAgg --offloadCore \ 
     --numPods=8 --switchRadix=8 --numServers=4 --linkRate=20Gbps --linkDelay=100us \
     --end=10.0 \
     --monitor --noAcks --until=1.0 \
     --flow=traffic-hadoop$1.txt --out=fct-disable-low-$1 --scenario=scenario-disable-low-loss.txt"
 
 template_disable_both="mpiexec -np 48 %s \
-    --mpi --podLps=48 --coreLps=16 --offloadAgg \ 
+    --mpi --podLps=32 --coreLps=16 --offloadAgg --offloadCore \ 
     --numPods=8 --switchRadix=8 --numServers=4 --linkRate=20Gbps --linkDelay=100us \
     --end=10.0 \
     --monitor --noAcks --until=1.0 \
