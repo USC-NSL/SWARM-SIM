@@ -14,8 +14,8 @@ const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
-const uint32_t BIG_FLOW_STEADY_TIME = 50;                 // ms
-const uint32_t RUNTIME = 150;                             // ms
+const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
+const uint32_t RUNTIME = 1500;                            // ms
 const uint32_t DEFAULT_MSS = 1460;
 const uint32_t CHECK_SHORT_COMPLETTION_EACH = 10;         // ms
 
