@@ -30,6 +30,11 @@ class SingleFlowApplication : public Application
     void SetNode(Ptr<Node> node);
     void SetAppId(uint32_t appid);
 
+    bool m_reportDone = false;
+    bool IsDone() {
+      return m_isDone;
+    }
+
     Ptr<Socket> GetSocket() const;
 
   protected:
@@ -72,6 +77,8 @@ class SingleFlowApplication : public Application
 
     /// Callbacks for tracing the packet Tx events, includes source and destination addresses
     TracedCallback<Ptr<const Packet>, const Address&, const Address&> m_txTraceWithAddresses;
+
+    bool m_isDone = false;
 
   private:
     void ScheduleNextTx();

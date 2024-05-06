@@ -4,6 +4,8 @@
 #include "stdint.h"
 #include "ns3/queue-size.h"
 #include "ns3/core-module.h"
+#include "ns3/applications-module.h"
+#include "ns3/single-flow-helper.h"
 
 #define TCP_DISCARD_PORT 10
 
@@ -14,6 +16,7 @@ const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;
 const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
 const uint32_t RUNTIME = 1500;                            // ms
 const uint32_t DEFAULT_MSS = 1460;
+const uint32_t CHECK_SHORT_COMPLETTION_EACH = 10;         // ms
 
 uint32_t systemCount = 1;
 uint32_t systemId = 0;
@@ -44,7 +47,11 @@ const std::vector<std::pair<uint32_t, uint32_t>> input_m_and_n = {
 void doTpTest();
 void doRttTest();
 void doDelayTest();
-
+void checkShortIsDone(ns3::Ptr<ns3::SingleFlowApplication> app) {
+    if (app->IsDone()) {
+        ns3::Simulator::Stop(ns3::Simulator::Now());
+    }
+}
 
 bool isCorrectIteration(uint32_t i) {
     return (i % systemCount) == systemId;

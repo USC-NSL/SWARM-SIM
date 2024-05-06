@@ -6,7 +6,6 @@
 #include "ns3/core-module.h"
 #include "ns3/network-module.h"
 #include "ns3/internet-module.h"
-#include "ns3/applications-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/ipv4-flow-classifier.h"
 
@@ -235,8 +234,8 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
 
         PointToPointHelper p2p;
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DEFAULT_LINK_DELAY) + "us"));
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
         
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_a) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
@@ -305,10 +304,10 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
         bulkM.SetAttribute("SendSize", UintegerValue(6000));
         bulkN.SetAttribute("SendSize", UintegerValue(6000));
 
-        BulkSendHelper bulk("ns3::TcpSocketFactory", InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
-        bulk.SetAttribute("SendSize", UintegerValue(6000));
-        bulk.SetAttribute("MaxBytes", UintegerValue(flowSize));
-        ApplicationContainer shortApplication = bulk.Install(h1);
+        SingleFlowHelper shortHelper("ns3::TcpSocketFactory", InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
+        shortHelper.SetAttribute("PacketSize", UintegerValue(DEFAULT_MSS));
+        shortHelper.SetAttribute("FlowSize", UintegerValue(flowSize));
+        ApplicationContainer shortApplication = shortHelper.Install(h1);
         
         ApplicationContainer bulkMContainer, bulkNContainer;
 
@@ -323,6 +322,12 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
         bulkMContainer.Start(Seconds(0.1));
         bulkNContainer.Start(Seconds(0.1));
         shortApplication.Start(MilliSeconds(BIG_FLOW_STEADY_TIME));
+
+        Ptr<SingleFlowApplication> shortFlowApplication = DynamicCast<SingleFlowApplication>(shortApplication.Get(0));
+        shortFlowApplication->m_reportDone = true;
+
+        for (uint32_t i = (BIG_FLOW_STEADY_TIME / CHECK_SHORT_COMPLETTION_EACH); i  < (RUNTIME / CHECK_SHORT_COMPLETTION_EACH); i++)
+            Simulator::Schedule(MilliSeconds(BIG_FLOW_STEADY_TIME + i * CHECK_SHORT_COMPLETTION_EACH), checkShortIsDone, shortFlowApplication);
 
         Simulator::Stop(MilliSeconds(RUNTIME + 100));
         Simulator::Run();
