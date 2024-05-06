@@ -1,6 +1,7 @@
 #include <iomanip>
+#include <unistd.h>
+#include <mpi.h>
 #include "offline.h"
-#include "ns3/mpi-module.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/flow-monitor.h"
 #include "ns3/core-module.h"
@@ -12,12 +13,16 @@
 using namespace ns3;
 
 
-std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt, uint32_t delay_a, uint32_t delay_b) {
+std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
     std::vector<double> throughputs;
 
+    if (systemId == 0)
+        std::cout << "Evaluating LOSS = " << loss_rate << " and RTT = " << rtt << std::endl;
+    usleep(500);
+
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
-        // if (!isCorrectIteration(i))
-        //     continue;
+        if (!isCorrectIteration(i))
+            continue;
 
         std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
         // Create the topology
@@ -27,23 +32,22 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt, uint32_t 
         Ptr<Node> s2 = CreateObject<Node>();
 
         PointToPointHelper p2p;
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
-        
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_a) + "us"));
+        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
         NetDeviceContainer dh1s1 = p2p.Install(h1s1);
         
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_b) + "us"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer s2h2 = NodeContainer(s2);
         s2h2.Add(h2);
         NetDeviceContainer ds2h2 = p2p.Install(s2h2);
 
-        NS_ASSERT(rtt >= (delay_a + delay_b + 2));
+        NS_ASSERT(rtt >= (2*DELAY_A_B +2* DELAY_A_B + 2));
 
         // Assign the delay for s1 and s2 link
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string((rtt - (delay_a + delay_b)) / 2) + "us"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string((rtt - (4 * DELAY_A_B)) / 2) + "us"));
         NodeContainer s1s2 = NodeContainer(s1);
         s1s2.Add(s2);
         NetDeviceContainer ds1s2 = p2p.Install(s1s2);
@@ -112,12 +116,16 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt, uint32_t 
     return throughputs;
 }
 
-std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize, uint32_t delay_a, uint32_t delay_b) {
+std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) {
     std::vector<uint32_t> rttCounts;
 
+    if (systemId == 0)
+        std::cout << "Evaluating LOSS = " << loss_rate << " and RTT = " << rtt << " and FlowSize = " << flowSize << std::endl;
+    usleep(500);
+
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
-        // if (!isCorrectIteration(i))
-        //     continue;
+        if (!isCorrectIteration(i))
+            continue;
 
         std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
         // Create the topology
@@ -127,23 +135,23 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
         Ptr<Node> s2 = CreateObject<Node>();
 
         PointToPointHelper p2p;
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
         
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_a) + "us"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
         NetDeviceContainer dh1s1 = p2p.Install(h1s1);
         
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_b) + "us"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer s2h2 = NodeContainer(s2);
         s2h2.Add(h2);
         NetDeviceContainer ds2h2 = p2p.Install(s2h2);
 
-        NS_ASSERT(rtt >= (delay_a + delay_b + 2));
+        NS_ASSERT(rtt >= (4 * DELAY_A_B + 2));
 
         // Assign the delay for s1 and s2 link
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string((rtt - (delay_a + delay_b)) / 2) + "us"));
+        p2p.SetChannelAttribute("Delay", StringValue(std::to_string((rtt - (4 * DELAY_A_B)) / 2) + "us"));
         NodeContainer s1s2 = NodeContainer(s1);
         s1s2.Add(s2);
         NetDeviceContainer ds1s2 = p2p.Install(s1s2);
@@ -215,12 +223,15 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
     return rttCounts;
 }
 
-std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32_t M, uint32_t N, uint32_t delay_a, uint32_t delay_b) {
+std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
     std::vector<uint32_t> delays;
+    if (systemId == 0)
+        std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
+    usleep(500);
 
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
-        // if (!isCorrectIteration(i))
-        //     continue;
+        if (!isCorrectIteration(i))
+            continue;
 
         std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
         // Create the topology
@@ -237,7 +248,6 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
         // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
         p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
         
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_a) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
         NetDeviceContainer dh1s1 = p2p.Install(h1s1);
@@ -247,16 +257,12 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
         NodeContainer h4s1 = NodeContainer(h4);
         h4s1.Add(s1);
         NetDeviceContainer dh4s1 = p2p.Install(h4s1);
-        
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string(delay_b) + "us"));
         NodeContainer s2h2 = NodeContainer(s2);
         s2h2.Add(h2);
         NetDeviceContainer ds2h2 = p2p.Install(s2h2);
         NodeContainer s2h5 = NodeContainer(s2);
         s2h5.Add(h5);
         NetDeviceContainer ds2h5 = p2p.Install(s2h5);
-
-        p2p.SetChannelAttribute("Delay", StringValue(std::to_string((rtt - (delay_a + delay_b)) / 2) + "us"));
         NodeContainer s1s2 = NodeContainer(s1);
         s1s2.Add(s2);
         NetDeviceContainer ds1s2 = p2p.Install(s1s2);
@@ -306,7 +312,7 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
 
         SingleFlowHelper shortHelper("ns3::TcpSocketFactory", InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
         shortHelper.SetAttribute("PacketSize", UintegerValue(DEFAULT_MSS));
-        shortHelper.SetAttribute("FlowSize", UintegerValue(flowSize));
+        shortHelper.SetAttribute("FlowSize", UintegerValue(VERY_SHORT_FLOW_SIZE));
         ApplicationContainer shortApplication = shortHelper.Install(h1);
         
         ApplicationContainer bulkMContainer, bulkNContainer;
@@ -343,7 +349,7 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t rtt, uint32_t flowSize, uint32
             Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(stat->first);
             if (tuple.destinationAddress == dst && tuple.sourceAddress == src && tuple.destinationPort == TCP_DISCARD_PORT) {
                 delays.push_back(
-                    (stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds()) - rtt
+                    (stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds()) - (6 * DEFAULT_LINK_DELAY)
                 );
                 if (!found)
                     found = true;
@@ -428,25 +434,28 @@ void doDelayTest() {
      *     Queue Delay Analysis
      ********************************/
 
-    std::map<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, std::vector<uint32_t>> queueDelays;    
+    std::map<std::tuple<uint32_t, double>, std::vector<uint32_t>> queueDelays;    
     std::ofstream output;
 
     output.open("delays-" + std::to_string(systemId) + ".csv");
-    output << "RTT,FLOW_SIZE,M,N,";
+    output << "N,u,";
     for (uint32_t i = 1; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++)
         output << i << ",";
     output << NUMBER_OF_EXPERIMENT_REPEATS_SHORT << '\n';
 
     std::cout << "Queue delay analysis ..." << std::endl;
-    for (const auto & input_rtt: input_rtts)
-        for (const auto & input_flow_size: input_flow_sizes)
-            for (const auto & m_and_n: input_m_and_n)
-            queueDelays[std::make_tuple(input_rtt, input_flow_size, m_and_n.first, m_and_n.second)] = queueDelayAnalysis(
-                input_rtt, input_flow_size, m_and_n.first, m_and_n.second
+    for (const auto & u: input_utilizations)
+        for (uint32_t i = 0; i < NUM_N; i++) {
+            uint32_t n = ((N_HIGH - N_LOW) / NUM_N * i + N_LOW);
+            uint32_t m = getMFromN(n, u);
+
+            queueDelays[std::make_tuple(n, u)] = queueDelayAnalysis(
+                n, m
             );
+        }
 
     for (const auto & it: queueDelays) {
-        output << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',' << std::get<2>(it.first) << ',' << std::get<3>(it.first) << ',';
+        output << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',';
         for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
             output << it.second[i];
             if (i != (NUMBER_OF_EXPERIMENT_REPEATS_LONG-1))
@@ -471,13 +480,23 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("rtt", "Do RTT count test", param_do_rtt);
     cmd.AddValue("delay", "Do queue delay test", param_do_delay);
 
+    MPI_Init(NULL, NULL);
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    systemCount = (uint32_t) world_size;
+    systemId = (uint32_t) world_rank;
+
+    if (systemId == 0)
+        std::cout << "Running on " << systemCount << " proceses"  << std::endl;
+    usleep(500);
+
+    // Finalize the MPI environment.
+    MPI_Finalize();
+
     cmd.Parse(argc, argv);
-
-    // GlobalValue::Bind("SimulatorImplementationType", StringValue("ns3::DistributedSimulatorImpl"));
-    // MpiInterface::Enable(&argc, &argv);
-
-    // systemId = MpiInterface::GetSystemId();
-    // systemCount = MpiInterface::GetSize();
 
     if (param_do_tp)
         doTpTest();
@@ -487,8 +506,6 @@ int main(int argc, char *argv[]) {
 
     if (param_do_delay)
         doDelayTest();
-
-    // MpiInterface::Disable();
 
     return 0;
 }

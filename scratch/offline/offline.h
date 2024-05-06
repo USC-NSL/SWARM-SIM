@@ -11,10 +11,11 @@
 
 const uint32_t DEFAULT_LINK_RATE = 20;                    // Gbps
 const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
+const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
-const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
-const uint32_t RUNTIME = 1500;                            // ms
+const uint32_t BIG_FLOW_STEADY_TIME = 50;                 // ms
+const uint32_t RUNTIME = 150;                             // ms
 const uint32_t DEFAULT_MSS = 1460;
 const uint32_t CHECK_SHORT_COMPLETTION_EACH = 10;         // ms
 
@@ -31,18 +32,14 @@ const std::vector<uint32_t> input_flow_sizes =
     {10 * DEFAULT_MSS, 20 * DEFAULT_MSS, 30 * DEFAULT_MSS, 40 * DEFAULT_MSS, 50 * DEFAULT_MSS,
         60 * DEFAULT_MSS, 70 * DEFAULT_MSS, 80 * DEFAULT_MSS, 90 * DEFAULT_MSS, 100 * DEFAULT_MSS};
 
-const std::vector<std::pair<uint32_t, uint32_t>> input_m_and_n = {
-    std::make_pair(9, 1),     // 0.1
-    std::make_pair(4, 1),     // 0.2
-    std::make_pair(2, 1),     // 0.33
-    std::make_pair(3, 2),     // 0.4
-    std::make_pair(1, 1),     // 0.5
-    std::make_pair(2, 3),     // 0.6
-    std::make_pair(1, 2),     // 0.67
-    std::make_pair(1, 4),     // 0.8
-    std::make_pair(1, 9)      // 0.9
+const std::vector<double> input_utilizations = {
+    0.8, 0.9, 0.95, 1.0
 };
 
+const uint32_t N_LOW = 1000;
+const uint32_t N_HIGH = 24000;
+const uint32_t NUM_N = 200;
+const uint32_t VERY_SHORT_FLOW_SIZE = 512;
 
 void doTpTest();
 void doRttTest();
@@ -57,26 +54,24 @@ bool isCorrectIteration(uint32_t i) {
     return (i % systemCount) == systemId;
 }
 
+uint32_t getMFromN(uint32_t N, double u) {
+    if (u == 1.0)
+        return 0;
+    return (N / u) - N;
+}
+
 std::vector<double> throughputAnalysis(
     double loss_rate, 
-    uint32_t rtt, 
-    uint32_t delay_a = DEFAULT_LINK_DELAY, 
-    uint32_t delay_b = DEFAULT_LINK_DELAY);
+    uint32_t rtt);
 
 std::vector<uint32_t> rttAnalysis(
     double loss_rate, 
     uint32_t rtt, 
-    uint32_t flowSize, 
-    uint32_t delay_a = DEFAULT_LINK_DELAY, 
-    uint32_t delay_b = DEFAULT_LINK_DELAY);
+    uint32_t flowSize);
 
 std::vector<uint32_t> queueDelayAnalysis(
-    uint32_t rtt, 
-    uint32_t flowSize, 
-    uint32_t M, 
-    uint32_t N,
-    uint32_t delay_a = DEFAULT_LINK_DELAY, 
-    uint32_t delay_b = DEFAULT_LINK_DELAY);
+    uint32_t N, 
+    uint32_t M);
 
 void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
