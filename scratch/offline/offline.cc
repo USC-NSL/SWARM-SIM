@@ -233,6 +233,8 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
         if (!isCorrectIteration(i))
             continue;
 
+        uint32_t localPortStart = 1000;
+
         std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
         // Create the topology
         Ptr<Node> h1 = CreateObject<Node>();
@@ -305,11 +307,6 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
         ApplicationContainer sinkApplicationH3 = sinkH3.Install(h3);
         ApplicationContainer sinkApplicationH5 = sinkH5.Install(h5);
 
-        BulkSendHelper bulkM("ns3::TcpSocketFactory", InetSocketAddress("10.0.2.1", TCP_DISCARD_PORT));
-        BulkSendHelper bulkN("ns3::TcpSocketFactory", InetSocketAddress("10.0.4.2", TCP_DISCARD_PORT));
-        bulkM.SetAttribute("SendSize", UintegerValue(6000));
-        bulkN.SetAttribute("SendSize", UintegerValue(6000));
-
         SingleFlowHelper shortHelper("ns3::TcpSocketFactory", InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
         shortHelper.SetAttribute("PacketSize", UintegerValue(DEFAULT_MSS));
         shortHelper.SetAttribute("FlowSize", UintegerValue(VERY_SHORT_FLOW_SIZE));
@@ -317,10 +314,21 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
         
         ApplicationContainer bulkMContainer, bulkNContainer;
 
-        for (uint32_t i = 0; i < M; i++)
+        BulkSendHelper bulkM("ns3::TcpSocketFactory", InetSocketAddress("10.0.2.1", TCP_DISCARD_PORT));
+        for (uint32_t i = 0; i < M; i++) {
+            bulkM.SetAttribute("SendSize", UintegerValue(6000));
+            bulkM.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkMContainer.Add(bulkM.Install(h4));
-        for (uint32_t i = 0; i < N; i++)
+            ++localPortStart;
+        }
+
+        BulkSendHelper bulkN("ns3::TcpSocketFactory", InetSocketAddress("10.0.4.2", TCP_DISCARD_PORT));
+        for (uint32_t i = 0; i < N; i++) {
+            bulkN.SetAttribute("SendSize", UintegerValue(6000));
+            bulkN.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkNContainer.Add(bulkN.Install(h4));
+            ++localPortStart;
+        }
 
         sinkApplicationH2.Start(Seconds(0.05));
         sinkApplicationH3.Start(Seconds(0.05));
