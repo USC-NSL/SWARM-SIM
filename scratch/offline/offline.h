@@ -38,7 +38,7 @@ const std::vector<double> input_utilizations = {
 
 const uint32_t N_LOW = 1000;
 const uint32_t N_HIGH = 24000;
-const uint32_t NUM_N = 200;
+const uint32_t NUM_N = 20;
 const uint32_t VERY_SHORT_FLOW_SIZE = 512;
 
 void doTpTest();
