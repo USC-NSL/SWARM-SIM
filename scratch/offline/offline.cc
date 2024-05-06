@@ -356,9 +356,12 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
         for (FlowMonitor::FlowStatsContainerCI stat = stats.begin(); stat != stats.end(); stat++) {
             Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(stat->first);
             if (tuple.destinationAddress == dst && tuple.sourceAddress == src && tuple.destinationPort == TCP_DISCARD_PORT) {
-                delays.push_back(
-                    ((int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())) - (6 * DEFAULT_LINK_DELAY)
-                );
+                if (stat->second.timeLastRxPacket.GetMicroSeconds() == 0) 
+                    delays.push_back(-1);
+                else
+                    delays.push_back(
+                        ((int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())) - (6 * DEFAULT_LINK_DELAY)
+                    );
                 if (!found)
                     found = true;
             }
