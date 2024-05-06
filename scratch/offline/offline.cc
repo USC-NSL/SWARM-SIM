@@ -357,7 +357,7 @@ std::vector<uint32_t> queueDelayAnalysis(uint32_t N, uint32_t M) {
             Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(stat->first);
             if (tuple.destinationAddress == dst && tuple.sourceAddress == src && tuple.destinationPort == TCP_DISCARD_PORT) {
                 delays.push_back(
-                    (stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds()) - (6 * DEFAULT_LINK_DELAY)
+                    ((int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())) - (6 * DEFAULT_LINK_DELAY)
                 );
                 if (!found)
                     found = true;
