@@ -233,7 +233,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
         PointToPointHelper p2p;
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DEFAULT_LINK_DELAY) + "us"));
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
         
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
