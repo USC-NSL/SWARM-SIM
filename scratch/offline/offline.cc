@@ -213,7 +213,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
     //     std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
     // usleep(500);
 
-    for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
+    // for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
         // RngSeedManager::SetSeed(i + 1000);
         // if (!isCorrectIteration(i))
         //     continue;
@@ -380,7 +380,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
             }
         }
         NS_ASSERT(found);
-    }
+    // }
 
     return delays;
 }

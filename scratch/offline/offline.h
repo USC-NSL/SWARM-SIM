@@ -22,7 +22,7 @@ const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 5;   
-const uint32_t BIG_FLOW_STEADY_TIME = 50;                 // ms
+const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
 const uint32_t RUNTIME = 1500;                            // ms
 const uint32_t RUNTIME_LARGE = 5000;                      // ms
 const uint32_t DEFAULT_MSS = 1460;
@@ -63,7 +63,7 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
 
     if (shortFlowApplicationInstance->IsDone()) {
         doneCount++;
-        if (doneCount == NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
+        if (doneCount >= NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
             ns3::Simulator::Stop(ns3::Seconds(0));
         else {
             std::cout << "[" << systemId << "]" << "DoneCount = " << doneCount << "\n";
