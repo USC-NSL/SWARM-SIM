@@ -21,11 +21,14 @@ if __name__ == '__main__':
                 first_line = csvfile.readline().strip()
                 continue
             else:
-                line = csvfile.readlines()[-1].strip()
-                fields = line.split(',')
-                if prefix is None:
-                    prefix = ','.join(fields[0:-1])
-                results.append(fields[-1])
+                lines = csvfile.readlines()[1:]
+                # fields = line.split(',')
+                # if prefix is None:
+                #     prefix = ','.join(fields[0:-1])
+                # results.append(fields[-1])
+                results.extend(lines)
 
-    print(prefix + ',' + ','.join(results))
+    results = [first_line + '\n'] + results
+
+    print(''.join(results))
                 
