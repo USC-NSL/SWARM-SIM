@@ -363,7 +363,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
                         (int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())
                     ) - (6 * DEFAULT_LINK_DELAY);
 
-                    if (delay < 0 || delay > RUNTIME * 1000)
+                    if (delay < 0 || delay > (int) RUNTIME * 1000)
                         delays.push_back(-1);
                     else
                         delays.push_back(delay);   
