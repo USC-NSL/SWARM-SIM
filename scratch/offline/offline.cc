@@ -78,7 +78,7 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
         sinkApplication.Start(Seconds(0.05));
         bulkApplication.Start(Seconds(0.1));
 
-        Simulator::Stop(MilliSeconds(RUNTIME + 100));
+        Simulator::Stop(MilliSeconds(RUNTIME_LARGE + 100));
         Simulator::Run();
         Simulator::Destroy();
 
@@ -91,7 +91,7 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
         for (FlowMonitor::FlowStatsContainerCI stat = stats.begin(); stat != stats.end(); stat++) {
             Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(stat->first);
             if (tuple.destinationAddress == dst && tuple.sourceAddress == src && tuple.destinationPort == TCP_DISCARD_PORT) {
-                throughputs.push_back((stat->second.rxBytes /  (static_cast<double>(RUNTIME) / 1000)));
+                throughputs.push_back((stat->second.rxBytes /  (static_cast<double>(RUNTIME_LARGE) / 1000)));
                 found = true;
                 break;
             }
