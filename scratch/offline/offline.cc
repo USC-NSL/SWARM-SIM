@@ -414,7 +414,7 @@ void doTpTest() {
     uint32_t counter = 0;
     for (const auto & input_packet_drop: input_packet_drops) {
         for (const auto & input_rtt: input_rtts) {
-            if (!isCorrectIteration(counter)) {
+            if (counter != userId) {
                 counter += 1;
                 continue;
             }
@@ -530,6 +530,7 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("tp", "Do throughput test", param_do_tp);
     cmd.AddValue("rtt", "Do RTT count test", param_do_rtt);
     cmd.AddValue("delay", "Do queue delay test", param_do_delay);
+    cmd.AddValue("id", "User Id", userId);
 
     MPI_Init(NULL, NULL);
     int world_size;

@@ -25,6 +25,7 @@ uint32_t doneCount = 0;
 
 uint32_t systemCount = 1;
 uint32_t systemId = 0;
+uint32_t userId = 0;
 
 const std::vector<uint32_t> input_rtts = 
     {4 * DEFAULT_LINK_DELAY, 6 * DEFAULT_LINK_DELAY, 8 * DEFAULT_LINK_DELAY};
