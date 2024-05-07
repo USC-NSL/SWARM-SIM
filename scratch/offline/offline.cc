@@ -116,8 +116,8 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
     return throughputs;
 }
 
-std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) {
-    std::vector<uint32_t> rttCounts;
+std::vector<int> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) {
+    std::vector<int> rttCounts;
 
     if (systemId == 0)
         std::cout << "Evaluating LOSS = " << loss_rate << " and RTT = " << rtt << " and FlowSize = " << flowSize << std::endl;
@@ -447,7 +447,7 @@ void doRttTest() {
      *        RTT Analysis
      ********************************/
 
-    std::map<std::tuple<double, uint32_t, uint32_t>, std::vector<uint32_t>> rttCounts;
+    std::map<std::tuple<double, uint32_t, uint32_t>, std::vector<int>> rttCounts;
     std::ofstream output;
 
     std::cout << "RTT count analysis ..." << std::endl;

@@ -83,7 +83,7 @@ std::vector<double> throughputAnalysis(
     double loss_rate, 
     uint32_t rtt);
 
-std::vector<uint32_t> rttAnalysis(
+std::vector<int> rttAnalysis(
     double loss_rate, 
     uint32_t rtt, 
     uint32_t flowSize);
