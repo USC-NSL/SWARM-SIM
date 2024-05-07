@@ -53,18 +53,18 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
         return;
 
     if (shortFlowApplicationInstance->IsDone()) {
-        doneCount++;
-        if (doneCount == NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
+        // doneCount++;
+        // if (doneCount == NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
             ns3::Simulator::Stop(ns3::Seconds(0));
-        else {
-            ns3::SingleFlowHelper shortHelper("ns3::TcpSocketFactory", ns3::InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
-            shortHelper.SetAttribute("PacketSize", ns3::UintegerValue(DEFAULT_MSS));
-            shortHelper.SetAttribute("FlowSize", ns3::UintegerValue(VERY_SHORT_FLOW_SIZE));
-            ns3::ApplicationContainer shortApplication = shortHelper.Install(h1);
-            shortFlowApplicationInstance = ns3::DynamicCast<ns3::SingleFlowApplication>(shortApplication.Get(0));
-            shortFlowApplicationInstance->m_reportDone = true;
-            shortApplication.Start(ns3::Seconds(0));
-        }
+        // else {
+        //     ns3::SingleFlowHelper shortHelper("ns3::TcpSocketFactory", ns3::InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
+        //     shortHelper.SetAttribute("PacketSize", ns3::UintegerValue(DEFAULT_MSS));
+        //     shortHelper.SetAttribute("FlowSize", ns3::UintegerValue(VERY_SHORT_FLOW_SIZE));
+        //     ns3::ApplicationContainer shortApplication = shortHelper.Install(h1);
+        //     shortFlowApplicationInstance = ns3::DynamicCast<ns3::SingleFlowApplication>(shortApplication.Get(0));
+        //     shortFlowApplicationInstance->m_reportDone = true;
+        //     shortApplication.Start(ns3::Seconds(0));
+        // }
     }
 }
 
