@@ -213,6 +213,7 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
                     (int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())
                 );
                 NS_ASSERT(delay > 0 && delay < (RUNTIME * 1000));
+                std::cout << "Delay = " << delay << '\n';
                 rttCounts.push_back(delay);
                 if (!found)
                     found = true;
