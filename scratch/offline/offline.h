@@ -9,15 +9,19 @@
 
 #define TCP_DISCARD_PORT 10
 
-const uint32_t DEFAULT_LINK_RATE = 20;                    // Gbps
-const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
+const uint32_t DEFAULT_LINK_RATE = 300;                    // Gbps
+const uint32_t DEFAULT_LINK_DELAY = 6000;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
 const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
 const uint32_t RUNTIME = 1500;                            // ms
+const uint32_t RUNTIME_LARGE = 5000;                      // ms
 const uint32_t DEFAULT_MSS = 1460;
 const uint32_t CHECK_SHORT_COMPLETTION_EACH = 10;         // ms
+
+ns3::Ptr<ns3::SingleFlowApplication> shortFlowApplicationInstance = nullptr;
+uint32_t doneCount = 0;
 
 uint32_t systemCount = 1;
 uint32_t systemId = 0;
@@ -33,7 +37,8 @@ const std::vector<uint32_t> input_flow_sizes =
         60 * DEFAULT_MSS, 70 * DEFAULT_MSS, 80 * DEFAULT_MSS, 90 * DEFAULT_MSS, 100 * DEFAULT_MSS};
 
 const std::vector<double> input_utilizations = {
-    0.9, 0.95, 1.0
+    // 0.9, 0.95, 1.0
+    1.0
 };
 
 const uint32_t N_LOW = 1000;
@@ -44,9 +49,23 @@ const uint32_t VERY_SHORT_FLOW_SIZE = 512;
 void doTpTest();
 void doRttTest();
 void doDelayTest();
-void checkShortIsDone(ns3::Ptr<ns3::SingleFlowApplication> app) {
-    if (app->IsDone()) {
-        ns3::Simulator::Stop(ns3::Simulator::Now());
+void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
+    if (shortFlowApplicationInstance == nullptr)
+        return;
+
+    if (shortFlowApplicationInstance->IsDone()) {
+        doneCount++;
+        if (doneCount == NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
+            ns3::Simulator::Stop(ns3::Seconds(0));
+        else {
+            ns3::SingleFlowHelper shortHelper("ns3::TcpSocketFactory", ns3::InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
+            shortHelper.SetAttribute("PacketSize", ns3::UintegerValue(DEFAULT_MSS));
+            shortHelper.SetAttribute("FlowSize", ns3::UintegerValue(VERY_SHORT_FLOW_SIZE));
+            ns3::ApplicationContainer shortApplication = shortHelper.Install(h1);
+            shortFlowApplicationInstance = ns3::DynamicCast<ns3::SingleFlowApplication>(shortApplication.Get(0));
+            shortFlowApplicationInstance->m_reportDone = true;
+            shortApplication.Start(ns3::Seconds(0));
+        }
     }
 }
 
@@ -77,12 +96,12 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
     ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::TcpDctcp")));
-    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(7500));
-    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(10000));
+    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(1460));
+    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(1500));
     ns3::GlobalValue::Bind ("ChecksumEnabled", ns3::BooleanValue (false));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseEcn", ns3::BooleanValue (true));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseHardDrop", ns3::BooleanValue (false));
-    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (7500));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (1460));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("5000p")));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::QW", ns3::DoubleValue (1));
 }

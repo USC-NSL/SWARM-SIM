@@ -219,10 +219,12 @@ SingleFlowApplication::StopApplication() // Called at time specified by Stop
     }
 
     // Out single FlowApp self-disposes when it is finished
-    if (!m_reportDone)
+    if (!m_reportDone) {
         DoDispose();
-    else 
+    }
+    else {
         m_isDone = true;
+    }
 }
 
 void

@@ -9,6 +9,7 @@
 #include "ns3/internet-module.h"
 #include "ns3/point-to-point-module.h"
 #include "ns3/ipv4-flow-classifier.h"
+#include "ns3/traffic-control-helper.h"
 
 using namespace ns3;
 
@@ -228,8 +229,10 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
     // usleep(500);
 
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
+        RngSeedManager::SetSeed(i + 1000);
         // if (!isCorrectIteration(i))
         //     continue;
+        doneCount = 0;
 
         uint32_t localPortStart = 1000;
 
@@ -268,6 +271,22 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
         InternetStackHelper internet;
         internet.InstallAll();
+
+        TrafficControlHelper redHelper;
+        redHelper.SetRootQueueDisc (
+            "ns3::RedQueueDisc",
+            "LinkBandwidth", StringValue (std::to_string(DEFAULT_LINK_RATE) + "Gbps"),
+            "LinkDelay", StringValue (std::to_string(DEFAULT_LINK_DELAY) + "us"),
+            // 50 For every 10 Gbps
+            "MinTh", DoubleValue (100),
+            "MaxTh", DoubleValue (300)
+        );
+        redHelper.Install(dh1s1);
+        redHelper.Install(dh3s1);
+        redHelper.Install(dh4s1);
+        redHelper.Install(ds2h2);
+        redHelper.Install(ds2h5);
+        redHelper.Install(ds1s2);
 
         // Assign IPs
         Ipv4AddressHelper ipv4;
@@ -334,13 +353,13 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
         bulkNContainer.Start(Seconds(0.1));
         shortApplication.Start(MilliSeconds(BIG_FLOW_STEADY_TIME));
 
-        Ptr<SingleFlowApplication> shortFlowApplication = DynamicCast<SingleFlowApplication>(shortApplication.Get(0));
-        shortFlowApplication->m_reportDone = true;
+        shortFlowApplicationInstance = DynamicCast<SingleFlowApplication>(shortApplication.Get(0));
+        shortFlowApplicationInstance->m_reportDone = true;
 
-        for (uint32_t i = (BIG_FLOW_STEADY_TIME / CHECK_SHORT_COMPLETTION_EACH); i  < (RUNTIME / CHECK_SHORT_COMPLETTION_EACH); i++)
-            Simulator::Schedule(MilliSeconds(BIG_FLOW_STEADY_TIME + i * CHECK_SHORT_COMPLETTION_EACH), checkShortIsDone, shortFlowApplication);
+        for (uint32_t i = (BIG_FLOW_STEADY_TIME / CHECK_SHORT_COMPLETTION_EACH); i  < (RUNTIME_LARGE / CHECK_SHORT_COMPLETTION_EACH); i++)
+            Simulator::Schedule(MilliSeconds(BIG_FLOW_STEADY_TIME + i * CHECK_SHORT_COMPLETTION_EACH), checkShortIsDone, h1);
 
-        Simulator::Stop(MilliSeconds(RUNTIME + 100));
+        Simulator::Stop(MilliSeconds(RUNTIME_LARGE + 100));
         Simulator::Run();
         Simulator::Destroy();
 
@@ -362,7 +381,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
                     std::cout << "Delay = " << delay << std::endl;
 
-                    if ((delay < 0) || (delay > ((int) RUNTIME * 1000)))
+                    if ((delay < 0) || (delay > ((int) RUNTIME_LARGE * 1000)))
                         delays.push_back(-1);
                     else
                         delays.push_back(delay);   
