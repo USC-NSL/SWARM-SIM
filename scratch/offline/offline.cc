@@ -32,8 +32,7 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
         Ptr<Node> s2 = CreateObject<Node>();
 
         PointToPointHelper p2p;
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
@@ -135,8 +134,7 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
         Ptr<Node> s2 = CreateObject<Node>();
 
         PointToPointHelper p2p;
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
         
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DELAY_A_B) + "us"));
         NodeContainer h1s1 = NodeContainer(h1);
@@ -247,8 +245,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
         PointToPointHelper p2p;
         p2p.SetChannelAttribute("Delay", StringValue(std::to_string(DEFAULT_LINK_DELAY) + "us"));
-        // p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
-        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Mbps"));
+        p2p.SetDeviceAttribute("DataRate", StringValue(std::to_string(DEFAULT_LINK_RATE) + "Gbps"));
         
         NodeContainer h1s1 = NodeContainer(h1);
         h1s1.Add(s1);
