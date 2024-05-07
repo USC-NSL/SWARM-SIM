@@ -363,7 +363,9 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
                         (int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())
                     ) - (6 * DEFAULT_LINK_DELAY);
 
-                    if (delay < 0 || delay > (int) RUNTIME * 1000)
+                    std::cout << "Delay = " << delay << std::endl;
+
+                    if ((delay < 0) || (delay > ((int) RUNTIME * 1000)))
                         delays.push_back(-1);
                     else
                         delays.push_back(delay);   
@@ -401,9 +403,9 @@ void doTpTest() {
 
     for (const auto & it: throughputs) {
         output << std::setprecision(6) << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',';
-        for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
+        for (uint32_t i = 0; i < it.second.size(); i++) {
             output << it.second[i];
-            if (i != (NUMBER_OF_EXPERIMENT_REPEATS_LONG-1))
+            if (i != (it.second.size()-1))
                 output << ',';
         }
         output << '\n';
@@ -436,9 +438,9 @@ void doRttTest() {
 
     for (const auto & it: rttCounts) {
         output << std::setprecision(6) << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',' << std::get<2>(it.first) << ',';
-        for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
+        for (uint32_t i = 0; i < it.second.size(); i++) {
             output << it.second[i];
-            if (i != (NUMBER_OF_EXPERIMENT_REPEATS_LONG-1))
+            if (i != (it.second.size()-1))
                 output << ',';
         }
         output << '\n';
@@ -473,9 +475,9 @@ void doDelayTest() {
 
     for (const auto & it: queueDelays) {
         output << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',';
-        for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
+        for (uint32_t i = 0; i < it.second.size(); i++) {
             output << it.second[i];
-            if (i != (NUMBER_OF_EXPERIMENT_REPEATS_LONG-1))
+            if (i != (it.second.size()-1))
                 output << ',';
         }
         output << '\n';
