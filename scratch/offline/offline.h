@@ -22,7 +22,7 @@ const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
-const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
+const uint32_t BIG_FLOW_STEADY_TIME = 50;                 // ms
 const uint32_t RUNTIME = 1500;                            // ms
 const uint32_t RUNTIME_LARGE = 5000;                      // ms
 const uint32_t DEFAULT_MSS = 1460;
@@ -66,6 +66,7 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
         if (doneCount == NUMBER_OF_EXPERIMENT_REPEATS_SHORT)
             ns3::Simulator::Stop(ns3::Seconds(0));
         else {
+            std::count_if << "DoneCount = " << doneCount << "\n";
             ns3::SingleFlowHelper shortHelper("ns3::TcpSocketFactory", ns3::InetSocketAddress("10.0.1.2", TCP_DISCARD_PORT));
             shortHelper.SetAttribute("PacketSize", ns3::UintegerValue(DEFAULT_MSS));
             shortHelper.SetAttribute("FlowSize", ns3::UintegerValue(VERY_SHORT_FLOW_SIZE));
