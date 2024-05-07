@@ -13,7 +13,7 @@ if __name__ == '__main__':
     results = []
 
     args = parser.parse_args()
-    for i in range(args.count):
+    for i in range(int(args.count)):
         name = args.prefix + '-' + str(i) + '.txt'
         path = os.path.join(args.dir, name)
         with open(path, 'r') as csvfile:
