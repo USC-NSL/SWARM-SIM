@@ -21,7 +21,7 @@ const uint32_t DEFAULT_LINK_RATE = 20;                    // Gbps
 const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
-const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 5;   
+const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
 const uint32_t BIG_FLOW_STEADY_TIME = 500;                // ms
 const uint32_t RUNTIME = 1500;                            // ms
 const uint32_t RUNTIME_LARGE = 5000;                      // ms
@@ -76,6 +76,7 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
             ns3::ApplicationContainer shortApplication = shortHelper.Install(h1);
             shortFlowApplicationInstance = ns3::DynamicCast<ns3::SingleFlowApplication>(shortApplication.Get(0));
             shortFlowApplicationInstance->m_reportDone = true;
+            NS_ASSERT(!shortFlowApplicationInstance->IsDone());
             shortApplication.Start(ns3::MilliSeconds(10));
         }
     }
@@ -119,12 +120,12 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
     ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::TcpDctcp")));
-    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(6000));
-    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(6000));
+    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(1460));
+    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(1460));
     ns3::GlobalValue::Bind ("ChecksumEnabled", ns3::BooleanValue (false));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseEcn", ns3::BooleanValue (true));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseHardDrop", ns3::BooleanValue (false));
-    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (6000));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (1460));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("5000p")));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::QW", ns3::DoubleValue (1));
 }

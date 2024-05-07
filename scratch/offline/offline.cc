@@ -257,21 +257,21 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
         InternetStackHelper internet;
         internet.InstallAll();
 
-        TrafficControlHelper redHelper;
-        redHelper.SetRootQueueDisc (
-            "ns3::RedQueueDisc",
-            "LinkBandwidth", StringValue (std::to_string(DEFAULT_LINK_RATE) + "Mbps"),
-            "LinkDelay", StringValue (std::to_string(DEFAULT_LINK_DELAY) + "us"),
-            // 50 For every 10 Gbps
-            "MinTh", DoubleValue (100),
-            "MaxTh", DoubleValue (300)
-        );
-        redHelper.Install(dh1s1);
-        redHelper.Install(dh3s1);
-        redHelper.Install(dh4s1);
-        redHelper.Install(ds2h2);
-        redHelper.Install(ds2h5);
-        redHelper.Install(ds1s2);
+        // TrafficControlHelper redHelper;
+        // redHelper.SetRootQueueDisc (
+        //     "ns3::RedQueueDisc",
+        //     "LinkBandwidth", StringValue (std::to_string(DEFAULT_LINK_RATE) + "Mbps"),
+        //     "LinkDelay", StringValue (std::to_string(DEFAULT_LINK_DELAY) + "us"),
+        //     // 50 For every 10 Gbps
+        //     "MinTh", DoubleValue (100),
+        //     "MaxTh", DoubleValue (300)
+        // );
+        // redHelper.Install(dh1s1);
+        // redHelper.Install(dh3s1);
+        // redHelper.Install(dh4s1);
+        // redHelper.Install(ds2h2);
+        // redHelper.Install(ds2h5);
+        // redHelper.Install(ds1s2);
 
         // Assign IPs
         Ipv4AddressHelper ipv4;
@@ -317,7 +317,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
         BulkSendHelper bulkM("ns3::TcpSocketFactory", InetSocketAddress("10.0.2.1", TCP_DISCARD_PORT));
         for (uint32_t i = 0; i < M; i++) {
-            bulkM.SetAttribute("SendSize", UintegerValue(6000));
+            bulkM.SetAttribute("SendSize", UintegerValue(1460));
             bulkM.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkMContainer.Add(bulkM.Install(h4));
             ++localPortStart;
@@ -327,7 +327,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
 
         BulkSendHelper bulkN("ns3::TcpSocketFactory", InetSocketAddress("10.0.4.2", TCP_DISCARD_PORT));
         for (uint32_t i = 0; i < N; i++) {
-            bulkN.SetAttribute("SendSize", UintegerValue(6000));
+            bulkN.SetAttribute("SendSize", UintegerValue(1460));
             bulkN.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkNContainer.Add(bulkN.Install(h4));
             ++localPortStart;
