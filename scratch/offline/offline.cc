@@ -225,13 +225,13 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
 
 std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
     std::vector<int> delays;
-    if (systemId == 0)
-        std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
-    usleep(500);
+    // if (systemId == 0)
+    //     std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
+    // usleep(500);
 
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
-        if (!isCorrectIteration(i))
-            continue;
+        // if (!isCorrectIteration(i))
+        //     continue;
 
         uint32_t localPortStart = 1000;
 
@@ -462,16 +462,23 @@ void doDelayTest() {
         output << i << ",";
     output << NUMBER_OF_EXPERIMENT_REPEATS_SHORT << '\n';
 
-    std::cout << "Queue delay analysis ..." << std::endl;
-    for (const auto & u: input_utilizations)
+    std::cout << "Queue delay analysis for " << input_utilizations.size() * NUM_N << " scenarios" << std::endl;
+    uint32_t counter = 0;
+    for (const auto & u: input_utilizations) {
         for (uint32_t i = 0; i < NUM_N; i++) {
+            if (!isCorrectIteration(counter)) {
+                counter += 1;
+                continue;
+            }
             uint32_t n = ((N_HIGH - N_LOW) / NUM_N * i + N_LOW);
             uint32_t m = getMFromN(n, u);
 
             queueDelays[std::make_tuple(n, u)] = queueDelayAnalysis(
                 n, m
             );
+            counter += 1;
         }
+    }
 
     for (const auto & it: queueDelays) {
         output << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',';

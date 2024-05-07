@@ -33,12 +33,12 @@ const std::vector<uint32_t> input_flow_sizes =
         60 * DEFAULT_MSS, 70 * DEFAULT_MSS, 80 * DEFAULT_MSS, 90 * DEFAULT_MSS, 100 * DEFAULT_MSS};
 
 const std::vector<double> input_utilizations = {
-    0.8, 0.9, 0.95, 1.0
+    0.9, 0.95, 1.0
 };
 
 const uint32_t N_LOW = 1000;
-const uint32_t N_HIGH = 2400;
-const uint32_t NUM_N = 2;
+const uint32_t N_HIGH = 80000;
+const uint32_t NUM_N = 20;
 const uint32_t VERY_SHORT_FLOW_SIZE = 512;
 
 void doTpTest();
