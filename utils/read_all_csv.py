@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     for i in range(int(args.count)):
-        name = args.prefix + '-' + str(i) + '.txt'
+        name = args.prefix + '-' + str(i) + '.csv'
         path = os.path.join(args.dir, name)
         with open(path, 'r') as csvfile:
             if not first_line:
