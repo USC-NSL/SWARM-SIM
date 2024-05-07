@@ -14,6 +14,7 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
     usleep(500);
 
     for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_LONG; i++) {
+        RngSeedManager::SetSeed(i + 1000);
         if (!isCorrectIteration(i))
             continue;
 
