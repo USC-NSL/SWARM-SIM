@@ -72,6 +72,7 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
             shortHelper.SetAttribute("PacketSize", ns3::UintegerValue(DEFAULT_MSS));
             shortHelper.SetAttribute("FlowSize", ns3::UintegerValue(VERY_SHORT_FLOW_SIZE + ns3::Simulator::Now().GetMilliSeconds() % 128));
             shortHelper.SetAttribute("Local", ns3::AddressValue(ns3::InetSocketAddress("10.0.0.1", port_start)));
+            port_start++;
             ns3::ApplicationContainer shortApplication = shortHelper.Install(h1);
             shortFlowApplicationInstance = ns3::DynamicCast<ns3::SingleFlowApplication>(shortApplication.Get(0));
             shortFlowApplicationInstance->m_reportDone = true;
