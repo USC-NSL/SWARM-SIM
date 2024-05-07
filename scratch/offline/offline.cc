@@ -209,9 +209,11 @@ std::vector<uint32_t> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowS
         for (FlowMonitor::FlowStatsContainerCI stat = stats.begin(); stat != stats.end(); stat++) {
             Ipv4FlowClassifier::FiveTuple tuple = classifier->FindFlow(stat->first);
             if (tuple.destinationAddress == dst && tuple.sourceAddress == src && tuple.destinationPort == TCP_DISCARD_PORT) {
-                rttCounts.push_back(
-                    (stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds()) / rtt
+                int delay = (
+                    (int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())
                 );
+                NS_ASSERT(delay > 0 && delay < (RUNTIME * 1000));
+                rttCounts.push_back(delay);
                 if (!found)
                     found = true;
             }
