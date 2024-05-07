@@ -335,6 +335,8 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
                 localPortStart = 1000;
         }
 
+        std::cout << "localPort count " << localPortStart << std::endl;
+
         sinkApplicationH2.Start(Seconds(0.05));
         sinkApplicationH3.Start(Seconds(0.05));
         sinkApplicationH5.Start(Seconds(0.05));
