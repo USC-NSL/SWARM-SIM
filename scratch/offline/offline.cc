@@ -321,6 +321,8 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
             bulkM.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkMContainer.Add(bulkM.Install(h4));
             ++localPortStart;
+            if (localPortStart == UINT16_MAX)
+                localPortStart = 1000;
         }
 
         BulkSendHelper bulkN("ns3::TcpSocketFactory", InetSocketAddress("10.0.4.2", TCP_DISCARD_PORT));
@@ -329,6 +331,8 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
             bulkN.SetAttribute("Local", AddressValue(InetSocketAddress("10.0.3.1", localPortStart)));
             bulkNContainer.Add(bulkN.Install(h4));
             ++localPortStart;
+            if (localPortStart == UINT16_MAX)
+                localPortStart = 1000;
         }
 
         sinkApplicationH2.Start(Seconds(0.05));
