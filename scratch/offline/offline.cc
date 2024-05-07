@@ -196,7 +196,7 @@ std::vector<int> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) 
         sinkApplication.Start(Seconds(0.05));
         bulkApplication.Start(Seconds(0.1));
 
-        Simulator::Stop(MilliSeconds(RUNTIME + 100));
+        Simulator::Stop(MilliSeconds(RUNTIME*10 + 100));
         Simulator::Run();
         Simulator::Destroy();
 
