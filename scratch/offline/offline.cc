@@ -411,11 +411,20 @@ void doTpTest() {
         output << i << ",";
     output << NUMBER_OF_EXPERIMENT_REPEATS_LONG << '\n';
 
-    for (const auto & input_packet_drop: input_packet_drops)
-        for (const auto & input_rtt: input_rtts)
+    uint32_t counter = 0;
+    for (const auto & input_packet_drop: input_packet_drops) {
+        for (const auto & input_rtt: input_rtts) {
+            if (!isCorrectIteration(counter)) {
+                counter += 1;
+                continue;
+            }
+
             throughputs[std::make_tuple(input_packet_drop, input_rtt)] = throughputAnalysis(
                 input_packet_drop, input_rtt
             );
+            counter += 1;
+        }
+    }
 
     for (const auto & it: throughputs) {
         output << std::setprecision(6) << std::get<0>(it.first) << ',' << std::get<1>(it.first) << ',';
