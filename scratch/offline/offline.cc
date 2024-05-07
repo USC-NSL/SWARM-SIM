@@ -157,7 +157,7 @@ std::vector<int> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) 
         Ipv4Address dst = Ipv4Address("10.0.1.2");
 
         // Error model
-        Simulator::Schedule(MicroSeconds(100 + rtt + 50), schedulePacketLoss, loss_rate, ds1s2);
+        Simulator::Schedule(MicroSeconds(100 + rtt * 2), schedulePacketLoss, loss_rate, ds1s2);
 
         // Just use God routing
         Ipv4GlobalRoutingHelper::PopulateRoutingTables();
