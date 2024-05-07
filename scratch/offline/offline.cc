@@ -480,7 +480,7 @@ void doDelayTest() {
     uint32_t counter = 0;
     for (const auto & u: input_utilizations) {
         for (uint32_t i = 0; i < NUM_N; i++) {
-            if (!isCorrectIteration(counter) || counter < userId) {
+            if (!isCorrectIteration(counter) || counter > userId) {
                 counter += 1;
                 continue;
             }
