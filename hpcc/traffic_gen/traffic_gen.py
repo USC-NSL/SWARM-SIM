@@ -101,6 +101,8 @@ if __name__ == "__main__":
 	# generate flows
 	avg = customRand.get_avg()
 	avg_inter_arrival = (avg / (bandwidth * load / 8)) * 1e9
+	print(f"Average packet size is {customRand.get_avg()} bytes")
+	print(f"Average inter-arrival time is {avg_inter_arrival} ns")
 	n_flow_estimate = int(time / avg_inter_arrival * nhost)
 	n_flow = 0
 
