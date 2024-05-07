@@ -9,8 +9,8 @@
 
 #define TCP_DISCARD_PORT 10
 
-const uint32_t DEFAULT_LINK_RATE = 300;                    // Gbps
-const uint32_t DEFAULT_LINK_DELAY = 6000;                  // us
+const uint32_t DEFAULT_LINK_RATE = 20;                    // Gbps
+const uint32_t DEFAULT_LINK_DELAY = 100;                  // us
 const uint32_t DELAY_A_B = 50;                            // us
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_LONG = 30;    
 const uint32_t NUMBER_OF_EXPERIMENT_REPEATS_SHORT = 30;   
@@ -37,8 +37,7 @@ const std::vector<uint32_t> input_flow_sizes =
         60 * DEFAULT_MSS, 70 * DEFAULT_MSS, 80 * DEFAULT_MSS, 90 * DEFAULT_MSS, 100 * DEFAULT_MSS};
 
 const std::vector<double> input_utilizations = {
-    // 0.9, 0.95, 1.0
-    1.0
+    0.9, 0.95, 1.0
 };
 
 const uint32_t N_LOW = 1000;
