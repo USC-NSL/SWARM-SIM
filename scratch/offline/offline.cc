@@ -2,14 +2,6 @@
 #include <unistd.h>
 #include <mpi.h>
 #include "offline.h"
-#include "ns3/flow-monitor-helper.h"
-#include "ns3/flow-monitor.h"
-#include "ns3/core-module.h"
-#include "ns3/network-module.h"
-#include "ns3/internet-module.h"
-#include "ns3/point-to-point-module.h"
-#include "ns3/ipv4-flow-classifier.h"
-#include "ns3/traffic-control-helper.h"
 
 using namespace ns3;
 
@@ -67,13 +59,7 @@ std::vector<double> throughputAnalysis(double loss_rate, uint32_t rtt) {
         Ipv4Address src = Ipv4Address("10.0.0.1");
         Ipv4Address dst = Ipv4Address("10.0.1.2");
 
-        // Error model
-        Ptr<RateErrorModel> em = CreateObject<RateErrorModel>();
-        em->SetRate(loss_rate);
-        em->SetUnit(RateErrorModel::ERROR_UNIT_PACKET);
-        ds1s2.Get(0)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-        ds1s2.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-        NS_ASSERT(em->IsEnabled());
+        Simulator::Schedule(Seconds(0.2), schedulePacketLoss, loss_rate, ds1s2);
 
         // Just use God routing
         Ipv4GlobalRoutingHelper::PopulateRoutingTables();
@@ -171,12 +157,7 @@ std::vector<int> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) 
         Ipv4Address dst = Ipv4Address("10.0.1.2");
 
         // Error model
-        Ptr<RateErrorModel> em = CreateObject<RateErrorModel>();
-        em->SetRate(loss_rate);
-        em->SetUnit(RateErrorModel::ERROR_UNIT_PACKET);
-        ds1s2.Get(0)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-        ds1s2.Get(1)->SetAttribute("ReceiveErrorModel", PointerValue(em));
-        NS_ASSERT(em->IsEnabled());
+        Simulator::Schedule(MicroSeconds(100 + rtt + 50), schedulePacketLoss, loss_rate, ds1s2);
 
         // Just use God routing
         Ipv4GlobalRoutingHelper::PopulateRoutingTables();
@@ -212,7 +193,7 @@ std::vector<int> rttAnalysis(double loss_rate, uint32_t rtt, uint32_t flowSize) 
                 int delay = (
                     (int)(stat->second.timeLastRxPacket.GetMicroSeconds() - stat->second.timeFirstTxPacket.GetMicroSeconds())
                 );
-                NS_ASSERT(delay > 0 && delay < (RUNTIME * 1000));
+                
                 std::cout << "Delay = " << delay << '\n';
                 rttCounts.push_back(delay);
                 if (!found)

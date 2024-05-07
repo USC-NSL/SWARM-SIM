@@ -6,6 +6,14 @@
 #include "ns3/core-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/single-flow-helper.h"
+#include "ns3/flow-monitor-helper.h"
+#include "ns3/flow-monitor.h"
+#include "ns3/core-module.h"
+#include "ns3/network-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/point-to-point-module.h"
+#include "ns3/ipv4-flow-classifier.h"
+#include "ns3/traffic-control-helper.h"
 
 #define TCP_DISCARD_PORT 10
 
@@ -67,6 +75,17 @@ void checkShortIsDone(ns3::Ptr<ns3::Node> h1) {
             shortApplication.Start(ns3::Seconds(0));
         }
     }
+}
+
+void schedulePacketLoss(double loss_rate, ns3::NetDeviceContainer ds1s2) {
+
+    // Error model
+    ns3::Ptr<ns3::RateErrorModel> em = ns3::CreateObject<ns3::RateErrorModel>();
+    em->SetRate(loss_rate);
+    em->SetUnit(ns3::RateErrorModel::ERROR_UNIT_PACKET);
+    ds1s2.Get(0)->SetAttribute("ReceiveErrorModel", ns3::PointerValue(em));
+    ds1s2.Get(1)->SetAttribute("ReceiveErrorModel", ns3::PointerValue(em));
+    NS_ASSERT(em->IsEnabled());
 }
 
 bool isCorrectIteration(uint32_t i) {
