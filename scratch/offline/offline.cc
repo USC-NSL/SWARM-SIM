@@ -213,15 +213,15 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
     //     std::cout << "Evaluating N = " << N << " and M = " << M << std::endl;
     // usleep(500);
 
-    for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
-        RngSeedManager::SetSeed(i + 1000);
+    // for (uint32_t i = 0; i < NUMBER_OF_EXPERIMENT_REPEATS_SHORT; i++) {
+        // RngSeedManager::SetSeed(i + 1000);
         // if (!isCorrectIteration(i))
         //     continue;
         doneCount = 0;
 
         uint32_t localPortStart = 1000;
 
-        std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
+        // std::cout << "[" << systemId << "]" << "Iteration " << i << std::endl;
         // Create the topology
         Ptr<Node> h1 = CreateObject<Node>();
         Ptr<Node> h2 = CreateObject<Node>();
@@ -376,7 +376,7 @@ std::vector<int> queueDelayAnalysis(uint32_t N, uint32_t M) {
             }
         }
         NS_ASSERT(found);
-    }
+    // }
 
     return delays;
 }
