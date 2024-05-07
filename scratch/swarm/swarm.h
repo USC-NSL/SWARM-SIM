@@ -49,16 +49,10 @@ using namespace std;
 
 /**
  * File outputs
- * 
- * NOTE: For `PCAP_DIR`, the MakeFeile uses a hard-coded value
- *       for it, so keep in mind to update it if you change
- *       the value here.
 */
 string ANIM_FILE_OUTPUT = "swarm-anim.xml";
 string FLOW_FILE_OUTPUT = "swarm-flow.xml";
 string FLOW_FILE_PREFIX = "swarm-flow";
-string PCAP_DIR = "swarm-pcaps";
-string PCAP_PREFIX = "host-";
 
 #if MPI_ENABLED
 #include "ns3/mpi-module.h"
@@ -75,17 +69,6 @@ const char* COMPONENT_NAME = "SWARMSimulation";
 */
 const uint32_t DEFAULT_LINK_RATE = 40;          // Gbps
 const uint32_t DEFAULT_LINK_DELAY = 50;         // us
-
-
-/**
- * IPv4 Address Assignement Params
-*/
-const char lanIpv4AddressBase[] = "10.0.0.0";
-const char lanIpv4AddressMask[] = "255.255.255.252";
-const char serverIpv4AddressBase[] = "192.168.0.0";
-const char serverIpv4AddressMask[] = "255.255.255.252";
-const char naiveIpv4AddressBase[] = "10.0.0.0";
-const char naiveIpv4AddressMask[] = "255.255.255.252";
 
 
 /**
@@ -115,26 +98,21 @@ const uint32_t DEFAULT_NUM_SERVERS = DEFAULT_SWITCH_RADIX / 2;
 /**
  * Misc. definitions
 */
-#define UDP_DISCARD_PORT 9
-#define TCP_DISCARD_PORT 10
-#define TCP_LOCAL_START_PORT 20
+#define UDP_DISCARD_PORT 9                         // For UDP packet sinks
+#define TCP_DISCARD_PORT 10                        // For TCP packet sinks
+#define TCP_LOCAL_START_PORT 20                    // The starting local port for binding
 
 #define UDP_PACKET_SIZE_BIG 1024
 #define UDP_PACKET_SIZE_SMALL 64
 #define TCP_PACKET_SIZE 1400
 
-#define TICK_PROGRESS_EVERY_WHAT_PERCENT 0.1
-#define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10
+#define TICK_PROGRESS_EVERY_WHAT_PERCENT 0.1       // How frequently report the time progress?
+#define CHECK_FLOW_COMPLETION_EVERY_WHAT_MS 10     // How frequently report flow scheduling progress?
 #define PROGRESS_BAR_WIDTH 70
 
-#define QUIET_INTERVAL_LENGTH 1.0
-#define APPLICATION_START_TIME 1.0
-
-/**
- * Drop tail queue max length
- *  @note Not used yet ...
-*/
-const uint32_t MAX_PACKET_PER_QUEUE = 10;
+#define QUIET_INTERVAL_LENGTH 1.0                  // The grace period after the simulation basically ends
+#define APPLICATION_START_TIME 1.0                 // When to start all applications. We do this to make 
+                                                   // sure no extra transient behavior arises.
 
 /**
  * The struct that will keep the topology parameters
@@ -152,7 +130,8 @@ typedef struct topology_descriptor_t {
 
 /**
  * Our level mapper function for WCMP stacks on aggregation and edge
- * nodes.
+ * nodes. It receives an IP address and decides which particular WCMP
+ * table to use.
  * We'll declare it like this here and then bind it later.
 */
 ns3::level_mapper_func wcmp_level_mapper;
@@ -287,19 +266,62 @@ class ClosTopology {
         void createPodMPI();
         #endif
         
+        /**
+         * Only server devices have any IP address.
+         * In general, the 'n'th server in the 'p'th pod, under the
+         * 't'th ToR in that pod will get the IP address `10.p.t.n`.
+         * 
+         * Fabric interfaces (i.e. all links between ToR, Aggregate and Cores)
+         * will have no IP address at all.
+        */
         void assignServerIps();
         void createFabricInterfaces();
 
         void setupServerRouting();
         void setupCoreRouting();
         
-        // MUST be called before creating interfaces
+        /**
+         * We have our own WCMP stack defined in the source file.
+         * As with the normal internet stack, this needs to be instantiated 
+         * before calling `createFabriceInterfaces`.
+        */
         void installWcmpStack();
+
+        /**
+         * We use a RED queue. Our main congestion control protocol will be
+         * DCTCP. We use the same configuration rationale outlined for that
+         * protocol. You may wish to see the DCTCP example of NS-3 to see what
+         * those are.
+        */
         void installRedQueueDisc();
 
+        /**
+         * This is technically WCMP, but without explicit
+         * modification by the user in terms of what weights to use, it just
+         * results in ECMP.
+        */
         void doEcmp();
+
+        /**
+         * When a link between a ToR and an aggregate goes down, one can either
+         * modify WCMP weights to re-route packets to other aggergates to reach that
+         * ToR, or one could `buonce` the packet from that aggregation to a different
+         * ToR, then let that ToR send it to another aggregate to route it (this is
+         * similar to how the BGP enabled data centers for facebook work).
+         * We don't enable this during our tests, since we want to see the packet loss.
+        */
         void enableAggregateBackupPaths();
 
+        /**
+         * Since we don't have backup paths, to route packets without loss in the event
+         * of a link failure, some WCMP weights need to be updated. The mitigation 
+         * strategy for each case is different and is described in each function.
+         * 
+         * Note: We still use Ipv4StaticRouting for static routes, but in NS-3, when
+         * an interface goes down, all routes bound to it go with it as well, and will
+         * not return even if the interface returns. As such we need to explicitly
+         * restore such routes after an interface becomes enabled again.
+        */
         void mitigateEdgeToAggregateLink(uint32_t ei, uint32_t aj, uint16_t weight);
         void mitigateEdgeToAggregateLinkDown(uint32_t ei, uint32_t aj);
         void mitigateEdgeToAggregateLinkUp(uint32_t ei, uint32_t aj);
@@ -312,6 +334,10 @@ class ClosTopology {
         void mitigateLinkDown(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
         void mitigateLinkUp(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx);
 
+        /**
+         * All `doX` functions, implement scenario scheduler functions that are needed
+         * to be bound to the scenario action function pointers.
+        */
         void doDisableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
         void doEnableLink(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, bool auto_mitiagate);
         void doChangeBandwidth(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string dataRateStr);
@@ -319,11 +345,28 @@ class ClosTopology {
         void doUpdateWcmp(topology_level node_level, uint32_t node_idx, uint32_t interface_idx, uint16_t level, uint16_t weight);
         void doSetLinkLoss(topology_level src_level, uint32_t src_idx, topology_level dst_level, uint32_t dst_idx, const string packetLossRate);
 
+        /**
+         * Just a UDP echo between two hosts.
+        */
         void echoBetweenHosts(uint32_t client_host, uint32_t server_host, double interval=0.1);
+
+        /**
+         * Open a CBR TCP stream from one host to another with a given rate.
+         * The bidirectional case does this for both sides.
+        */
         void unidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
         void bidirectionalCbrBetweenHosts(uint32_t client_host, uint32_t server_host, const string rate="2Mbps");
+
+        /**
+         * All-to-All means between all pairs, bidirectionally. We use this to stress the
+         * network for debugging.
+        */
         void doAllToAllTcp(uint32_t totalNumberOfServers, const string scream_rate);
         void doAllToAllPing(uint32_t totalNumberOfServers);
+
+        /**
+         * These utility functions are pretty self-explanatory.
+        */
 
         ns3::Ipv4InterfaceContainer getTorServerInterfaces(uint32_t edge_idx) {
             return this->serverInterfaces[edge_idx];
@@ -381,6 +424,16 @@ class ClosTopology {
             return this->getHost(edge_idx, idx);
         }
 
+        /**
+         * When using MPI, it is important to know whether or not a node belongs to the
+         * current rank, since if it does not, then packet generation should be prohibited
+         * on that node from this rank, only forwarding is enabled.
+         * Thus, a `Local` host refers to a server node that has the same systemId as that
+         * of the called, meaning that the caller is allowed to install applications on that
+         * node.
+         * 
+         * If that is not the case, then this function returns null. 
+        */
         ns3::Ptr<ns3::Node> getLocalHost(uint32_t edge_idx, uint32_t host_idx) const {
             #if MPI_ENABLED
             if (systemId != getSystemIdOfServer(host_idx)) {
@@ -524,6 +577,12 @@ void closHostFlowDispatcher(host_flow *flow, const ClosTopology *topo);
 template<typename... Args> void schedule(double t, link_state_change_func func, Args... args);
 template<typename... Args> void schedule(double t, link_attribute_change_func func, Args... args);
 
+/**
+ * In our experience, running this thing can take a very long time, 
+ * even with MPI. These progress report functions help you guess how
+ * much longer you would have to wait, but they tend to be quite
+ * non-linear.
+*/
 void reportTimeProgress(double end);
 void reportFlowProgress(FlowScheduler *flowSCheduler);
 void DoReportProgress(double end, FlowScheduler *flowSCheduler);
@@ -534,12 +593,12 @@ void doGlobalConfigs() {
     ns3::Config::SetDefault("ns3::PcapFileWrapper::NanosecMode", ns3::BooleanValue(true));
     ns3::Config::SetDefault("ns3::TcpL4Protocol::SocketType",
         ns3::TypeIdValue(ns3::TypeId::LookupByName("ns3::" + param_tcp_variant)));
-    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(7500));
-    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(10000));
+    ns3::Config::SetDefault("ns3::TcpSocket::SegmentSize", ns3::UintegerValue(1460));
+    ns3::Config::SetDefault("ns3::PointToPointNetDevice::Mtu", ns3::UintegerValue(1500));
     ns3::GlobalValue::Bind ("ChecksumEnabled", ns3::BooleanValue (false));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseEcn", ns3::BooleanValue (true));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::UseHardDrop", ns3::BooleanValue (false));
-    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (7500));
+    ns3::Config::SetDefault ("ns3::RedQueueDisc::MeanPktSize", ns3::UintegerValue (1500));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::MaxSize", ns3::QueueSizeValue (ns3::QueueSize ("5000p")));
     ns3::Config::SetDefault ("ns3::RedQueueDisc::QW", ns3::DoubleValue (1));
 }

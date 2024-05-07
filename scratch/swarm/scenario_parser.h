@@ -37,6 +37,15 @@ struct scenario_functions {
     void (*migrate_func) (U*, uint32_t, uint32_t, int);
 };
 
+
+/**
+ * A scenario file specifies what sort of actions or states should be
+ * dicatated on the network. These can include packet loss, changes in
+ * link delay, or other stuff.
+ * 
+ * Scenario files have a minimal grammar, basically just lines of `<operations> .. .<args>`.
+ * The operation field are macros defined above.
+*/
 template <typename T, typename U>
 int parseSecnarioScript(string path, T *topo_object, U *flow_object, scenario_functions<T, U> *scenario_fs) {
     std::ifstream script;

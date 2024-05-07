@@ -9,14 +9,32 @@
 
 using namespace std;
 
+
+/**
+ * A host flow is designated with its source and destination host
+ * index (which uniquely gives the IP addresses), when it starts
+ * and how big it is.
+ * We send the flows in a bulk, an application sends as much data as
+ * it can until the full size is reached.
+*/
 typedef struct host_flow_t {
     uint16_t src, dst;
     double t_arrival;
     uint32_t size;
 } host_flow;
 
+/**
+ * The `host_flow_dispatcher` is a function that actually creates
+ * and starts the application for a flow. This is the function that
+ * we schedule for the arrival time of each flow.
+ * Our implementation uses a SingleFlowApplication instance.
+*/
 typedef std::function<void(host_flow_t*)> host_flow_dispatcher;
 
+/**
+ * This calss reads a flow file and schedules each flow in a lazy 
+ * fashion (i.e. schedule one at a time).
+*/
 class FlowScheduler {
     private:
         uint32_t current_idx = 0;

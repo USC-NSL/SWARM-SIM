@@ -1,5 +1,7 @@
 ns3
 *.o
+*.xml
+*.csv
 __pycache__
 results
 old-results
